@@ -2,6 +2,7 @@ import React from 'react';
 import { useT } from '../i18n.jsx';
 import { Icon } from '../icons.jsx';
 import { HeroBg, SectionHeader } from '../shell.jsx';
+import { searchAirports } from '../data/airports.js';
 
 /* THY Route — Home page (hero with search, how it works, popular routes, partners) */
 const HomeDS = window.THYRouteDesignSystem_cb84b4;
@@ -20,18 +21,9 @@ function HomeBookingCard({ onSearch }) {
   const [showPax, setShowPax] = React.useState(false);
   const [dates, setDates] = React.useState({ go: '13 Haz', back: '28 Haz' });
 
-  const cities = [
-    { city: 'İstanbul',  code: 'IST', country: 'Türkiye' },
-    { city: 'Ankara',    code: 'ESB', country: 'Türkiye' },
-    { city: 'Antalya',   code: 'AYT', country: 'Türkiye' },
-    { city: 'Roma',      code: 'FCO', country: 'İtalya' },
-    { city: 'Paris',     code: 'CDG', country: 'Fransa' },
-    { city: 'Londra',    code: 'LHR', country: 'Birleşik Krallık' },
-    { city: 'Tokyo',     code: 'HND', country: 'Japonya' },
-    { city: 'New York',  code: 'JFK', country: 'ABD' },
-    { city: 'Barselona', code: 'BCN', country: 'İspanya' },
-    { city: 'Dubai',     code: 'DXB', country: 'BAE' },
-  ];
+  // Search the THY destination directory (140+ airports across 6 continents,
+  // multiple airports per city — see src/data/airports.js).
+  const cities = React.useMemo(() => searchAirports('', 200), []);
 
   const swap = () => { const a = from; setFrom(to); setTo(a); };
 
@@ -154,36 +146,80 @@ function Radio({ label, checked, onClick }) {
 
 function Dropdown({ items, onPick, onClose }) {
   const [q, setQ] = React.useState('');
-  const filtered = items.filter(c => (c.city + ' ' + c.code + ' ' + c.country).toLowerCase().includes(q.toLowerCase()));
+  // Live search via the airport directory. Falls back to the prop's `items`
+  // for the empty query so the page still renders quickly.
+  const filtered = q.trim() ? searchAirports(q, 40) : items.slice(0, 40);
+
+  // Group by city so multi-airport cities (IST+SAW, HND+NRT, LHR+LGW+STN)
+  // are shown together as one collapsible row.
+  const grouped = React.useMemo(() => {
+    const byCity = new Map();
+    for (const a of filtered) {
+      const key = `${a.city}__${a.country}`;
+      if (!byCity.has(key)) byCity.set(key, { city: a.city, country: a.country, airports: [] });
+      byCity.get(key).airports.push(a);
+    }
+    return Array.from(byCity.values());
+  }, [filtered]);
+
   React.useEffect(() => {
     const h = (e) => { if (!e.target.closest('.popover')) onClose(); };
     setTimeout(() => document.addEventListener('click', h), 0);
     return () => document.removeEventListener('click', h);
   }, [onClose]);
+
   return (
     <div className="popover" onClick={(e)=>e.stopPropagation()} style={{
-      position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 340,
+      position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 380,
       background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 40, padding: 12, maxHeight: 380, overflow: 'hidden',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 40, padding: 12, maxHeight: 420, overflow: 'hidden',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: '#F3F5F8', marginBottom: 8 }}>
         <Icon.search size={14} stroke={2.5} />
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Şehir veya havalimanı"
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Şehir, havalimanı adı veya IATA kodu"
           style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 13, flex: 1, color: 'var(--thy-navy)' }} />
       </div>
-      <div className="scroll-thin" style={{ maxHeight: 310, overflowY: 'auto' }}>
-        {filtered.map((c) => (
-          <button key={c.code} onClick={() => onPick(c)} style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 12px', background: 'transparent', border: 'none', cursor: 'pointer',
-            borderRadius: 6, textAlign: 'left',
-          }} onMouseEnter={(e)=>e.currentTarget.style.background='#F3F5F8'} onMouseLeave={(e)=>e.currentTarget.style.background='transparent'}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--thy-navy)' }}>{c.city}</div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>{c.country}</div>
+      <div className="scroll-thin" style={{ maxHeight: 350, overflowY: 'auto' }}>
+        {grouped.length === 0 && (
+          <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: '#94A3B8' }}>Sonuç bulunamadı</div>
+        )}
+        {grouped.map((g) => (
+          <div key={g.city + g.country} style={{ marginBottom: 4 }}>
+            {/* City header row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 10px 4px', borderBottom: '1px solid #F1F5F9',
+            }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--thy-navy)' }}>{g.city}</div>
+                <div style={{ fontSize: 10, color: '#94A3B8', letterSpacing: 0.3 }}>{g.country}</div>
+              </div>
+              {g.airports.length > 1 && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800, color: 'var(--thy-blue)', letterSpacing: 1,
+                  padding: '2px 6px', background: 'rgba(0,83,165,0.08)', borderRadius: 3,
+                }}>{g.airports.length} HAVALİMANI</span>
+              )}
             </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 800, color: 'var(--thy-red)', padding: '4px 8px', background: 'rgba(183,49,44,0.08)', borderRadius: 4 }}>{c.code}</span>
-          </button>
+            {/* Airport rows */}
+            {g.airports.map((a) => (
+              <button key={a.code} onClick={() => onPick(a)} style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '9px 10px', background: 'transparent', border: 'none', cursor: 'pointer',
+                borderRadius: 6, textAlign: 'left', marginTop: 2,
+              }} onMouseEnter={(e)=>e.currentTarget.style.background='#F3F5F8'} onMouseLeave={(e)=>e.currentTarget.style.background='transparent'}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <Icon.plane size={13} style={{ color: '#94A3B8', flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
+                </div>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 800, color: 'var(--thy-red)',
+                  padding: '3px 7px', background: 'rgba(183,49,44,0.08)', borderRadius: 4,
+                  flexShrink: 0, marginLeft: 8,
+                }}>{a.code}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </div>
     </div>

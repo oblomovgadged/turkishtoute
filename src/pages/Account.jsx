@@ -1,57 +1,13 @@
 import React from 'react';
 import { useT as useTA } from '../i18n.jsx';
 import { Icon as AIcon } from '../icons.jsx';
-import { watchAuth, listUserRoutes } from '../services/firebase.js';
 
 /* THY Route — Account / Dashboard */
 const ADS = window.THYRouteDesignSystem_cb84b4;
 const { Button: ABtn } = ADS;
 
-const FALLBACK_SAVED_ROUTES = [
-  { id: 'rm-1', name: 'Roma Rotam',         city: 'Roma',      country: 'İtalya',     places: 6, miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
-  { id: 'rm-2', name: 'Paris Romantik',      city: 'Paris',     country: 'Fransa',     places: 8, miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
-  { id: 'rm-3', name: 'Barcelona Balıkavcı', city: 'Barselona', country: 'İspanya',    places: 5, miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
-  { id: 'rm-4', name: 'Tokyo Yolculuğu',     city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
-];
-
 function AccountPage({ go }) {
   const t = useTA();
-
-  // null = loading, array = data (real or fallback)
-  const [savedRoutes, setSavedRoutes] = React.useState(null);
-
-  React.useEffect(() => {
-    const unsub = watchAuth(async (user) => {
-      if (!user) { setSavedRoutes(FALLBACK_SAVED_ROUTES); return; }
-      try {
-        const data = await listUserRoutes(user.uid);
-        if (data && data.length) {
-          setSavedRoutes(data.map((r) => {
-            const placesArr = Array.isArray(r.places) ? r.places : [];
-            const miles = placesArr.filter(p => p?.partner).reduce((s, p) => s + (p.miles || 0), 0);
-            return {
-              id: r.id,
-              name: r.name || `${r.city || ''} Rotam`,
-              city: r.city || '—',
-              country: r.country || '',
-              places: placesArr.length,
-              miles,
-              days: r.days || 3,
-              color: r.color || 'linear-gradient(135deg, #6B7C93, #0F2244)',
-              updated: 'Az önce',
-            };
-          }));
-        } else {
-          setSavedRoutes(FALLBACK_SAVED_ROUTES);
-        }
-      } catch (e) {
-        console.warn('[firebase] listUserRoutes failed', e);
-        setSavedRoutes(FALLBACK_SAVED_ROUTES);
-      }
-    });
-    return unsub;
-  }, []);
-
   const upcoming = [
     { id: 1, from: 'IST', to: 'FCO', fromCity: 'İstanbul', toCity: 'Roma',     date: '13 Haziran 2026', flight: 'TK 1855', pnr: 'SBA47R', status: 'KONFIRME', daysLeft: 6, hasRoute: true },
     { id: 2, from: 'IST', to: 'BCN', fromCity: 'İstanbul', toCity: 'Barselona',date: '02 Eylül 2026',  flight: 'TK 1857', pnr: 'BX12K9', status: 'PLANLANIYOR', daysLeft: 87, hasRoute: false },
@@ -61,6 +17,44 @@ function AccountPage({ go }) {
     { id: 4, from: 'IST', to: 'AYT', fromCity: 'İstanbul', toCity: 'Antalya',date: '04 Ara 2025',   miles: 480,  satisfied: true },
     { id: 5, from: 'IST', to: 'LHR', fromCity: 'İstanbul', toCity: 'Londra', date: '20 Eki 2025',   miles: 2890, satisfied: true },
   ];
+
+  /* ----- Saved routes state (so delete works) ----- */
+  const [savedRoutes, setSavedRoutes] = React.useState([
+    { id: 'rm-1', name: 'Roma Rotam',         city: 'Roma',      country: 'İtalya',     places: 6,  miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
+    { id: 'rm-2', name: 'Paris Romantik',      city: 'Paris',     country: 'Fransa',     places: 8,  miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
+    { id: 'rm-3', name: 'Barcelona Balıkavcı', city: 'Barselona', country: 'İspanya',    places: 5,  miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
+    { id: 'rm-4', name: 'Tokyo Yolculuğu',     city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
+  ]);
+  const deleteSavedRoute = (id) => {
+    if (!confirm('Bu rotayı silmek istediğinizden emin misiniz?')) return;
+    setSavedRoutes((rs) => rs.filter(r => r.id !== id));
+  };
+
+  /* ----- PNR lookup form ----- */
+  const [pnr, setPnr] = React.useState('');
+  const [pnrSurname, setPnrSurname] = React.useState('');
+  const [pnrStatus, setPnrStatus] = React.useState(null); // 'loading' | 'found' | 'error'
+  const [pnrResult, setPnrResult] = React.useState(null);
+  const submitPnr = (e) => {
+    e?.preventDefault();
+    if (!pnr.trim() || !pnrSurname.trim()) return;
+    setPnrStatus('loading');
+    // simulated lookup — in production this hits the THY PNR API
+    setTimeout(() => {
+      const valid = /^[A-Z0-9]{6}$/i.test(pnr.trim());
+      if (!valid) { setPnrStatus('error'); return; }
+      // mocked successful response
+      setPnrResult({
+        pnr: pnr.toUpperCase().trim(),
+        passenger: pnrSurname.trim().toUpperCase(),
+        from: 'IST', to: 'FCO',
+        fromCity: 'İstanbul', toCity: 'Roma',
+        out: { flight: 'TK 1855', date: '13 Haz 2026', dep: '07:35', arr: '09:15' },
+        ret: { flight: 'TK 1872', date: '20 Haz 2026', dep: '11:45', arr: '15:30' },
+      });
+      setPnrStatus('found');
+    }, 800);
+  };
   return (
     <div style={{ background: '#F3F5F8', minHeight: 'calc(100vh - 70px)' }}>
       {/* hero */}
@@ -112,6 +106,144 @@ function AccountPage({ go }) {
 
       {/* upcoming */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 32px' }}>
+        {/* ---------- PNR LOOKUP ---------- */}
+        <div style={{
+          background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12,
+          padding: 24, marginBottom: 32, position: 'relative', overflow: 'hidden',
+        }}>
+          <div aria-hidden style={{
+            position: 'absolute', top: -40, right: -40, width: 200, height: 200, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(0,83,165,0.06), transparent 70%)',
+          }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+            <span style={{
+              width: 44, height: 44, borderRadius: 10, background: 'rgba(0,83,165,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--thy-blue)',
+              flexShrink: 0,
+            }}>
+              <AIcon.plane size={22} />
+            </span>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 800, color: 'var(--thy-blue)', letterSpacing: 2 }}>
+                PNR İLE ROTA OLUŞTUR
+              </div>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 800, color: 'var(--thy-navy)', margin: '4px 0 0' }}>
+                Biletinizi alıp şimdi rotanızı çizebiliriz
+              </h3>
+              <p style={{ fontSize: 13, color: '#64748B', margin: '4px 0 0' }}>
+                Yolculuğunuzu planınızı yapmadan da biletinizi alıp devam edebilirsiniz. PNR ve soyadınızı girin — sistem gidiş-dönüş bilgilerinizi alıp sizin için bir rota oluştursun.
+              </p>
+            </div>
+          </div>
+
+          {!pnrResult && (
+            <form onSubmit={submitPnr} style={{ position: 'relative', display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 200px' }}>
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#64748B', letterSpacing: 1.5, display: 'block', marginBottom: 4 }}>PNR / REZERVASYON KODU</label>
+                <input value={pnr} onChange={(e) => setPnr(e.target.value.toUpperCase())} placeholder="Örn: SBA47R" maxLength={6}
+                  style={{
+                    width: '100%', padding: '12px 14px',
+                    border: '1.5px solid #E2E8F0', borderRadius: 6,
+                    fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 800, color: 'var(--thy-navy)',
+                    letterSpacing: 2, outline: 'none', background: '#fff',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--thy-blue)'}
+                  onBlur={(e) => e.target.style.borderColor = '#E2E8F0'} />
+              </div>
+              <div style={{ flex: '1 1 200px' }}>
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#64748B', letterSpacing: 1.5, display: 'block', marginBottom: 4 }}>YOLCU SOYADI</label>
+                <input value={pnrSurname} onChange={(e) => setPnrSurname(e.target.value)} placeholder="Soyadınız"
+                  style={{
+                    width: '100%', padding: '12px 14px',
+                    border: '1.5px solid #E2E8F0', borderRadius: 6,
+                    fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 700, color: 'var(--thy-navy)',
+                    outline: 'none', background: '#fff',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = 'var(--thy-blue)'}
+                  onBlur={(e) => e.target.style.borderColor = '#E2E8F0'} />
+              </div>
+              <button type="submit" disabled={pnrStatus === 'loading' || !pnr || !pnrSurname} style={{
+                padding: '12px 22px', background: 'var(--thy-red-light)', color: '#fff',
+                border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                opacity: (pnrStatus === 'loading' || !pnr || !pnrSurname) ? 0.55 : 1,
+              }}>
+                {pnrStatus === 'loading' ? 'Aranıyor…' : 'Rota oluştur →'}
+              </button>
+            </form>
+          )}
+
+          {pnrStatus === 'error' && (
+            <div style={{
+              marginTop: 14, padding: 12, background: 'rgba(239,46,31,0.06)',
+              border: '1px solid rgba(239,46,31,0.2)', borderRadius: 6,
+              fontSize: 12, color: 'var(--thy-red)', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <AIcon.x size={14} /> PNR bulunamadı. PNR 6 haneli alfanümerik olmalıdır (örn: SBA47R).
+            </div>
+          )}
+
+          {pnrResult && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+                background: 'rgba(34,197,94,0.1)', color: '#16A34A', borderRadius: 3,
+                fontSize: 10, fontWeight: 800, letterSpacing: 1.2, marginBottom: 14,
+              }}>
+                <AIcon.check size={11} stroke={3} /> PNR DOĞRULANDI
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[pnrResult.out, pnrResult.ret].map((leg, i) => (
+                  <div key={i} style={{
+                    padding: 16, background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0',
+                  }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 800, color: 'var(--thy-red)', letterSpacing: 1.5, marginBottom: 8 }}>
+                      {i === 0 ? 'GİDİŞ' : 'DÖNÜŞ'}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, color: 'var(--thy-navy)' }}>
+                          {i === 0 ? pnrResult.from : pnrResult.to}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748B' }}>{leg.dep}</div>
+                      </div>
+                      <div style={{ flex: 1, position: 'relative', height: 1, background: '#CBD5E1' }}>
+                        <AIcon.plane size={14} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) rotate(45deg)', background: '#F8FAFC', padding: 2, color: 'var(--thy-red)' }} />
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, color: 'var(--thy-navy)' }}>
+                          {i === 0 ? pnrResult.to : pnrResult.from}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748B' }}>{leg.arr}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{leg.date}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--thy-navy)' }}>{leg.flight}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, color: '#64748B' }}>
+                  Yolcu: <strong style={{ color: 'var(--thy-navy)' }}>{pnrResult.passenger}</strong> · PNR: <strong style={{ color: 'var(--thy-navy)', fontFamily: 'var(--font-mono)' }}>{pnrResult.pnr}</strong>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => { setPnrResult(null); setPnrStatus(null); setPnr(''); setPnrSurname(''); }} style={{
+                    padding: '10px 16px', background: '#fff', border: '1.5px solid #E2E8F0',
+                    color: 'var(--thy-navy)', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  }}>Vazgeç</button>
+                  <button onClick={() => go('route', { city: pnrResult.toCity, pnr: pnrResult.pnr })} style={{
+                    padding: '10px 22px', background: 'var(--thy-red-light)', color: '#fff',
+                    border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                  }}>Şimdi {pnrResult.toCity} rotanızı oluşturalım →</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 800, color: 'var(--thy-navy)', margin: '0 0 16px' }}>{t('ac.upcoming')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           {upcoming.map((trip) => (
@@ -178,12 +310,10 @@ function AccountPage({ go }) {
 
         <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 800, color: 'var(--thy-navy)', margin: '40px 0 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
           {t('ac.savedroutes')}
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#94A3B8' }}>4</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#94A3B8' }}>{savedRoutes.length}</span>
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-          {savedRoutes === null ? (
-            <div style={{ color: 'var(--thy-navy)', padding: 20, fontSize: 13, fontWeight: 700 }}>Yükleniyor...</div>
-          ) : savedRoutes.map((r) => (
+          {savedRoutes.map((r) => (
             <div key={r.id} style={{
               background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', overflow: 'hidden',
               transition: 'all .2s',
@@ -216,6 +346,15 @@ function AccountPage({ go }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 8 }}>
                 <span style={{ fontSize: 11, color: '#94A3B8' }}>Son güncelleme: {r.updated}</span>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => deleteSavedRoute(r.id)} title="Rotayı sil" style={{
+                    padding: '7px 9px', background: '#fff', border: '1px solid #E2E8F0',
+                    color: '#94A3B8', borderRadius: 4, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    transition: 'all .15s',
+                  }} onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--thy-red)'; e.currentTarget.style.borderColor = 'var(--thy-red)'; }}
+                     onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.borderColor = '#E2E8F0'; }}>
+                    <AIcon.trash size={12} />
+                  </button>
                   <button title={t('ac.download.pdf')} style={{
                     padding: '7px 10px', background: '#fff', border: '1px solid #E2E8F0',
                     color: 'var(--thy-navy)', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer',
@@ -230,6 +369,15 @@ function AccountPage({ go }) {
             </div>
           ))}
         </div>
+
+        {savedRoutes.length === 0 && (
+          <div style={{
+            padding: 28, background: '#fff', border: '1px dashed #CBD5E1', borderRadius: 12,
+            textAlign: 'center', color: '#64748B', fontSize: 13,
+          }}>
+            Hiç kayıtlı rotanız kalmadı. <strong style={{ color: 'var(--thy-navy)' }}>Seyahat Rotası</strong>'ndan yeni bir rota oluşturabilirsiniz.
+          </div>
+        )}
 
         <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 800, color: 'var(--thy-navy)', margin: '40px 0 16px' }}>{t('ac.past')}</h2>
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, overflow: 'hidden' }}>

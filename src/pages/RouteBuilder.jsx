@@ -2,42 +2,6 @@ import React from 'react';
 import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
-import { sendTripReport } from '../services/emailjs.js';
-import { watchAuth, saveRoute, updateRoutePlaces, subscribeRoute, loadRoute } from '../services/firebase.js';
-import { loadMaps, drawRoute } from '../services/maps.js';
-
-/* Cockpit-themed Google Maps style (THY navy aviation aesthetic) */
-const COCKPIT_MAP_STYLE = [
-  { elementType: 'geometry',          stylers: [{ color: '#0A1628' }] },
-  { elementType: 'labels.text.fill',  stylers: [{ color: '#94A3B8' }] },
-  { elementType: 'labels.text.stroke',stylers: [{ color: '#0A1628' }] },
-  { featureType: 'water',          elementType: 'geometry',         stylers: [{ color: '#142D4F' }] },
-  { featureType: 'water',          elementType: 'labels.text.fill', stylers: [{ color: '#6B8AA8' }] },
-  { featureType: 'road',           elementType: 'geometry',         stylers: [{ color: '#1F3A5F' }] },
-  { featureType: 'road',           elementType: 'labels.text.fill', stylers: [{ color: '#94A3B8' }] },
-  { featureType: 'road.highway',   elementType: 'geometry',         stylers: [{ color: '#2A4A75' }] },
-  { featureType: 'poi',                                              stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit',                                          stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative', elementType: 'geometry',         stylers: [{ color: '#1F3A5F' }] },
-  { featureType: 'landscape',      elementType: 'geometry',         stylers: [{ color: '#0F1F38' }] },
-];
-
-/* City center coordinates (lat/lng) — used by RealMap as center and for SVG-coord conversion */
-const CITY_CENTERS = {
-  Roma:      { lat: 41.9028, lng: 12.4964, latSpan: 0.10, lngSpan: 0.15 },
-  Paris:     { lat: 48.8566, lng:  2.3522, latSpan: 0.10, lngSpan: 0.15 },
-  Barselona: { lat: 41.3851, lng:  2.1734, latSpan: 0.10, lngSpan: 0.15 },
-  Tokyo:     { lat: 35.6762, lng: 139.6503,latSpan: 0.10, lngSpan: 0.15 },
-};
-
-/* Convert SVG coords (0..800, 0..600) → lat/lng around a city center. */
-function svgToLatLng(x, y, city) {
-  const c = CITY_CENTERS[city] || CITY_CENTERS.Roma;
-  return {
-    lat: (c.lat + c.latSpan / 2) - (y / 600) * c.latSpan,
-    lng: (c.lng - c.lngSpan / 2) + (x / 800) * c.lngSpan,
-  };
-}
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -203,104 +167,320 @@ function FakeMap({ places, selectedId, onSelectPlace, onAddPoint, copilots }) {
   );
 }
 
-/* ---------- Real Google Maps (cockpit theme) — same interface as FakeMap ---------- */
-function RealMap({ places, selectedId, onSelectPlace, onAddPoint, copilots, city, onFail }) {
-  const ref = React.useRef(null);
+/* ---------- Real Google Map (lazy-loaded; falls back to FakeMap on error) ---------- */
+let _gmapsPromise = null;
+function loadGoogleMaps(apiKey) {
+  if (!apiKey) return Promise.reject(new Error('Missing Google Maps API key'));
+  if (window.google?.maps) return Promise.resolve(window.google.maps);
+  if (_gmapsPromise) return _gmapsPromise;
+  _gmapsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places,geometry&language=tr`;
+    s.async = true; s.defer = true;
+    s.onload  = () => window.google?.maps ? resolve(window.google.maps) : reject(new Error('Google Maps did not load'));
+    s.onerror = () => reject(new Error('Google Maps script failed to load'));
+    document.head.appendChild(s);
+  });
+  return _gmapsPromise;
+}
+
+const CITY_CENTERS = {
+  Roma:      { lat: 41.9028, lng: 12.4964 },
+  Paris:     { lat: 48.8566, lng: 2.3522  },
+  Barselona: { lat: 41.3851, lng: 2.1734  },
+  Londra:    { lat: 51.5074, lng: -0.1278 },
+  Tokyo:     { lat: 35.6762, lng: 139.6503 },
+  'New York':{ lat: 40.7128, lng: -74.0060 },
+  Dubai:     { lat: 25.2048, lng: 55.2708 },
+  'İstanbul':{ lat: 41.0082, lng: 28.9784 },
+};
+
+// Dark Google Maps theme — cockpit-feel, with POIs kept clickable.
+const MAP_DARK_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#0A1628' }] },
+  { elementType: 'labels.text.fill',   stylers: [{ color: '#9CA3AF' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0A1628' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050B14' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1F2937' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0F172A' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#374151' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3B4858' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#243043' }] },
+  { featureType: 'administrative.country', elementType: 'labels.text.fill', stylers: [{ color: '#C5A059' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#E5E7EB' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0F1B2D' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#1F2937' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#243043' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#C5A059' }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'on' }] },
+  { featureType: 'poi.attraction', stylers: [{ visibility: 'on' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#0F2A1B' }] },
+];
+
+function buildNumberedMarker(number, color = '#B7312C') {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
+      <path d="M20 0 C9 0 0 9 0 20 C0 33 20 52 20 52 C20 52 40 33 40 20 C40 9 31 0 20 0 Z"
+        fill="${color}" stroke="#fff" stroke-width="2"/>
+      <circle cx="20" cy="20" r="12" fill="#fff"/>
+      <text x="20" y="25" text-anchor="middle" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13" font-weight="800" fill="${color}">${number}</text>
+    </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+function RealMap({ city, places, selectedId, onSelectPlace, onAddPlace, copilots, fallback }) {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
+  const containerRef = React.useRef(null);
   const mapRef = React.useRef(null);
   const markersRef = React.useRef([]);
-  const polylineRef = React.useRef(null);
-  const googleRef = React.useRef(null);
+  const lineRef = React.useRef(null);
+  const placesServiceRef = React.useRef(null);
+  const overlayRef = React.useRef(null);
+  const [status, setStatus] = React.useState('loading');
+  const [info, setInfo]     = React.useState(null);
 
-  const renderMarkersAndRoute = React.useCallback(() => {
-    const google = googleRef.current;
+  // bootstrap
+  React.useEffect(() => {
+    if (!apiKey) { setStatus('error'); return; }
+    let cancelled = false;
+    loadGoogleMaps(apiKey).then((maps) => {
+      if (cancelled || !containerRef.current) return;
+      const center = CITY_CENTERS[city] || CITY_CENTERS.Roma;
+      const map = new maps.Map(containerRef.current, {
+        center, zoom: 13,
+        disableDefaultUI: true,
+        zoomControl: true,
+        gestureHandling: 'greedy',
+        clickableIcons: true,
+        styles: MAP_DARK_STYLE,
+        backgroundColor: '#0A1628',
+      });
+      mapRef.current = map;
+      placesServiceRef.current = new maps.places.PlacesService(map);
+      map.addListener('click', (ev) => {
+        if (!ev.placeId) return;
+        ev.stop?.();
+        placesServiceRef.current.getDetails(
+          { placeId: ev.placeId, fields: ['name', 'geometry', 'rating', 'types', 'formatted_address', 'place_id'] },
+          (res, ok) => {
+            if (ok !== 'OK' || !res?.geometry?.location) return;
+            const pos = res.geometry.location;
+            setInfo({
+              name: res.name,
+              lat: pos.lat(), lng: pos.lng(),
+              rating: res.rating,
+              types: res.types,
+              address: res.formatted_address,
+              placeId: res.place_id || ev.placeId,
+            });
+          },
+        );
+      });
+      setStatus('ready');
+    }).catch(() => setStatus('error'));
+    return () => { cancelled = true; };
+  }, [apiKey, city]);
+
+  // markers + route line
+  React.useEffect(() => {
     const map = mapRef.current;
-    if (!google || !map) return;
-
+    if (!map || !window.google) return;
     markersRef.current.forEach(m => m.setMap(null));
     markersRef.current = [];
-    if (polylineRef.current) { polylineRef.current.setMap(null); polylineRef.current = null; }
+    if (lineRef.current) { lineRef.current.setMap(null); lineRef.current = null; }
 
-    const routed = places.filter(p => p.inRoute && p.order != null).sort((a, b) => a.order - b.order);
+    const center = CITY_CENTERS[city] || CITY_CENTERS.Roma;
+    const routed = places.filter(p => p.inRoute).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const path = [];
 
-    places.forEach((p) => {
-      const { lat, lng } = svgToLatLng(p.x, p.y, city);
-      const isRouted = p.inRoute && p.order != null;
-      const isSelected = p.id === selectedId;
-      const num = isRouted ? String(p.order + 1) : '';
-      const fill = isRouted ? '#B7312C' : '#FFFFFF';
-      const stroke = isRouted ? '#B7312C' : (p.partner ? '#C5A059' : '#0F2244');
-      const textColor = isRouted ? '#FFFFFF' : stroke;
-      const r = isRouted ? 14 : 9;
-      const sw = isSelected ? 4 : 3;
-      const halo = isSelected ? `<circle cx="20" cy="20" r="19" fill="rgba(183,49,44,0.22)"/>` : '';
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">${halo}<circle cx="20" cy="20" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/><text x="20" y="24" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="800" fill="${textColor}">${num}</text></svg>`;
-
-      const marker = new google.maps.Marker({
-        position: { lat, lng },
-        map,
-        title: p.name,
+    routed.forEach((p, idx) => {
+      const lat = p.lat ?? (center.lat + (300 - p.y) * 0.0001);
+      const lng = p.lng ?? (center.lng + (p.x - 400) * 0.00012);
+      const marker = new window.google.maps.Marker({
+        map, position: { lat, lng }, title: p.name,
         icon: {
-          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-          scaledSize: new google.maps.Size(40, 40),
-          anchor: new google.maps.Point(20, 20),
+          url: buildNumberedMarker(idx + 1, p.id === selectedId ? '#EF2E1F' : '#B7312C'),
+          scaledSize: new window.google.maps.Size(36, 47),
+          anchor: new window.google.maps.Point(18, 47),
         },
-        zIndex: isSelected ? 999 : (isRouted ? 100 : 10),
+        zIndex: p.id === selectedId ? 999 : 10 + idx,
+      });
+      marker.addListener('click', () => onSelectPlace(p.id));
+      markersRef.current.push(marker);
+      path.push({ lat, lng });
+    });
+
+    places.filter(p => !p.inRoute && p.partner).forEach((p) => {
+      const lat = p.lat ?? (center.lat + (300 - p.y) * 0.0001);
+      const lng = p.lng ?? (center.lng + (p.x - 400) * 0.00012);
+      const marker = new window.google.maps.Marker({
+        map, position: { lat, lng }, title: p.name,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 6,
+          fillColor: '#C5A059', fillOpacity: 1,
+          strokeColor: '#0A1628', strokeWeight: 2,
+        },
+        zIndex: 5,
       });
       marker.addListener('click', () => onSelectPlace(p.id));
       markersRef.current.push(marker);
     });
 
-    if (routed.length >= 2) {
-      const pts = routed.map(p => svgToLatLng(p.x, p.y, city));
-      polylineRef.current = drawRoute(google, map, pts);
+    if (path.length > 1) {
+      lineRef.current = new window.google.maps.Polyline({
+        map, path,
+        strokeColor: '#EF2E1F',
+        strokeOpacity: 0.85, strokeWeight: 3,
+        icons: [{ icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3 }, repeat: '120px' }],
+      });
     }
-  }, [places, selectedId, city, onSelectPlace]);
+  }, [places, selectedId, city, status, onSelectPlace]);
 
+  // overlay for screen position of the InfoCard
   React.useEffect(() => {
-    let cancelled = false;
-    loadMaps().then((google) => {
-      if (cancelled || !ref.current) return;
-      googleRef.current = google;
-      const c = CITY_CENTERS[city] || CITY_CENTERS.Roma;
-      mapRef.current = new google.maps.Map(ref.current, {
-        center: { lat: c.lat, lng: c.lng },
-        zoom: 13,
-        disableDefaultUI: false,
-        clickableIcons: false,
-        backgroundColor: '#0A1628',
-        styles: COCKPIT_MAP_STYLE,
-      });
-      mapRef.current.addListener('click', (e) => {
-        const lat = e.latLng.lat(), lng = e.latLng.lng();
-        const x = ((lng - (c.lng - c.lngSpan / 2)) / c.lngSpan) * 800;
-        const y = (((c.lat + c.latSpan / 2) - lat) / c.latSpan) * 600;
-        onAddPoint({ x: Math.round(x), y: Math.round(y) });
-      });
-      renderMarkersAndRoute();
-    }).catch((e) => {
-      console.warn('[maps] load failed — falling back to FakeMap', e);
-      if (!cancelled) onFail?.(e);
-    });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city]);
+    if (!info || !mapRef.current || !window.google) return;
+    const maps = window.google.maps;
+    const map = mapRef.current;
+    const updatePos = () => {
+      if (!overlayRef.current) return;
+      const proj = overlayRef.current.getProjection?.();
+      if (!proj) return;
+      const pt = proj.fromLatLngToContainerPixel(new maps.LatLng(info.lat, info.lng));
+      if (!pt) return;
+      setInfo((cur) => cur ? { ...cur, screen: { x: pt.x, y: pt.y } } : cur);
+    };
+    if (!overlayRef.current) {
+      class Overlay extends maps.OverlayView { onAdd(){} draw(){} onRemove(){} }
+      overlayRef.current = new Overlay();
+      overlayRef.current.setMap(map);
+    }
+    const listeners = [
+      map.addListener('bounds_changed', updatePos),
+      map.addListener('center_changed', updatePos),
+      map.addListener('zoom_changed',   updatePos),
+    ];
+    setTimeout(updatePos, 80);
+    return () => listeners.forEach(l => maps.event.removeListener(l));
+  }, [info?.placeId]);
 
-  React.useEffect(() => {
-    if (mapRef.current) renderMarkersAndRoute();
-  }, [renderMarkersAndRoute]);
+  if (status === 'error') return fallback || null;
 
   return (
-    <div style={{ position: 'relative', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#0A1628' }}>
-      <div ref={ref} style={{ width: '100%', height: '100%' }} />
-      <div style={{
-        position: 'absolute', top: 16, left: 16, padding: '8px 12px',
-        background: 'rgba(255,255,255,0.95)', border: '1px solid #E2E8F0',
-        borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--thy-navy)',
-        display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-      }}>
-        <RBIcon.plus size={12} stroke={3} /> Haritada bir yere tıklayın — rotaya eklensin
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0, background: '#0A1628' }} />
+
+      {status === 'loading' && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#0A1628', color: '#94A3B8', fontSize: 13, fontWeight: 700, letterSpacing: 1,
+        }}>
+          <span style={{
+            display: 'inline-block', width: 22, height: 22, borderRadius: '50%',
+            border: '3px solid rgba(255,255,255,0.12)', borderTopColor: 'var(--thy-gold)',
+            animation: 'spin 0.8s linear infinite', marginRight: 10,
+          }} />
+          Harita yükleniyor…
+        </div>
+      )}
+
+      {status === 'ready' && (
+        <div style={{
+          position: 'absolute', top: 14, left: 14, padding: '7px 12px',
+          background: 'rgba(10,22,40,0.85)', border: '1px solid rgba(197,160,89,0.3)',
+          borderRadius: 999, fontSize: 11, fontWeight: 700, color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 6, backdropFilter: 'blur(6px)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          <RBIcon.pin size={12} stroke={2.5} /> Bir yere tıklayın — detayı görün, rotaya ekleyin
+        </div>
+      )}
+
+      {status === 'ready' && (
+        <div style={{
+          position: 'absolute', bottom: 14, left: 14, background: 'rgba(10,22,40,0.9)', borderRadius: 8,
+          padding: '10px 14px', fontSize: 11, color: '#fff',
+          border: '1px solid rgba(197,160,89,0.2)', backdropFilter: 'blur(6px)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, marginBottom: 6, letterSpacing: 1, fontSize: 9, color: 'var(--thy-gold-light)' }}>HARİTA</div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#B7312C', border: '2px solid #fff' }} /> Rotada
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#C5A059' }} /> Mil partneri
+            </span>
+          </div>
+        </div>
+      )}
+
+      {info && info.screen && (
+        <PlaceInfoCard
+          info={info}
+          screen={info.screen}
+          onClose={() => setInfo(null)}
+          onAdd={() => { onAddPlace(info); setInfo(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PlaceInfoCard({ info, screen, onClose, onAdd }) {
+  const stars = Math.round((info.rating || 0) * 2) / 2;
+  return (
+    <div style={{
+      position: 'absolute',
+      left: screen.x, top: screen.y,
+      transform: 'translate(-50%, calc(-100% - 14px))',
+      width: 260, background: '#fff', borderRadius: 10,
+      boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+      border: '1px solid rgba(0,0,0,0.06)',
+      zIndex: 50, pointerEvents: 'auto',
+      animation: 'fadeInUp 0.18s var(--ease-aerodynamic) both',
+    }}>
+      <div style={{ position: 'relative', padding: 14 }}>
+        <button onClick={onClose} aria-label="Kapat" style={{
+          position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: '50%',
+          background: '#F3F5F8', border: 'none', cursor: 'pointer', color: '#64748B',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <RBIcon.x size={12} stroke={2.5} />
+        </button>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--thy-navy)', paddingRight: 28, lineHeight: 1.25 }}>
+          {info.name}
+        </div>
+        {info.rating > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 800, color: 'var(--thy-navy)' }}>{info.rating.toFixed(1)}</span>
+            <span style={{ color: 'var(--thy-gold)', letterSpacing: 1 }}>
+              {'★'.repeat(Math.floor(stars))}{stars % 1 ? '½' : ''}
+            </span>
+          </div>
+        )}
+        {info.address && (
+          <div style={{ fontSize: 11, color: '#64748B', marginTop: 6, lineHeight: 1.4 }}>
+            {info.address}
+          </div>
+        )}
       </div>
+      <div style={{ display: 'flex', borderTop: '1px solid #F1F5F9' }}>
+        <button onClick={onAdd} style={{
+          flex: 1, padding: '11px 12px', background: 'var(--thy-red)', color: '#fff',
+          border: 'none', borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
+          fontSize: 12, fontWeight: 800, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          <RBIcon.plus size={13} stroke={3} /> Rotaya ekle
+        </button>
+      </div>
+      <span aria-hidden style={{
+        position: 'absolute', bottom: -7, left: '50%', transform: 'translateX(-50%) rotate(45deg)',
+        width: 14, height: 14, background: '#fff',
+        borderRight: '1px solid rgba(0,0,0,0.06)', borderBottom: '1px solid rgba(0,0,0,0.06)',
+      }} />
     </div>
   );
 }
@@ -687,7 +867,6 @@ function RouteBuilderPage({ go, summary }) {
   const [tab, setTab] = React.useState('route');
   const [selectedId, setSelectedId] = React.useState(1);
   const [tickShare, setTickShare] = React.useState(false);
-  const [useReal, setUseReal] = React.useState(Boolean(import.meta.env.VITE_GOOGLE_MAPS_KEY));
 
   // Multi-route management (persists in localStorage)
   const STORAGE_KEY = 'thyroute_saved_routes';
@@ -714,97 +893,6 @@ function RouteBuilderPage({ go, summary }) {
   React.useEffect(() => { localStorage.setItem('thyroute_active_route', activeRouteId); }, [activeRouteId]);
   React.useEffect(() => { setRouteNameDraft(activeRoute?.name || ''); }, [activeRouteId]);
 
-  // Firebase auth subscription
-  const [currentUser, setCurrentUser] = React.useState(null);
-  React.useEffect(() => watchAuth((u) => setCurrentUser(u)), []);
-
-  // Echo-cancellation: tracks JSON of last places synced (in either direction).
-  // Prevents auto-save↔snapshot infinite loop.
-  const lastSyncedJSON = React.useRef('');
-
-  // Auto-save active route to Firestore (debounced 1500ms). Silent — no toast.
-  React.useEffect(() => {
-    if (!currentUser) return;
-    const placesJSON = JSON.stringify(places);
-    if (placesJSON === lastSyncedJSON.current) return; // already in-sync (came from snapshot)
-    const timer = setTimeout(async () => {
-      try {
-        const active = savedRoutes.find(r => r.id === activeRouteId);
-        if (!active) return;
-        if (active.firebaseId) {
-          await updateRoutePlaces(active.firebaseId, places);
-        } else {
-          const newId = await saveRoute(currentUser.uid, {
-            city, places, name: active.name,
-          });
-          if (newId) {
-            setSavedRoutes(rs => rs.map(r => r.id === activeRouteId ? { ...r, firebaseId: newId } : r));
-          }
-        }
-        lastSyncedJSON.current = placesJSON;
-      } catch (e) {
-        console.warn('[firebase] auto-save failed', e);
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [places, currentUser, activeRouteId, savedRoutes, city]);
-
-  // Real-time co-pilot sync: subscribe to active route in Firestore.
-  React.useEffect(() => {
-    const active = savedRoutes.find(r => r.id === activeRouteId);
-    const fbId = active?.firebaseId;
-    if (!fbId || !currentUser) return;
-    const unsub = subscribeRoute(fbId, (route) => {
-      if (!Array.isArray(route.places)) return;
-      const remoteJSON = JSON.stringify(route.places);
-      if (remoteJSON === lastSyncedJSON.current) return; // echo from our own write
-      lastSyncedJSON.current = remoteJSON;
-      setPlaces(route.places);
-    });
-    return () => { try { unsub?.(); } catch (e) {} };
-  }, [activeRouteId, currentUser, savedRoutes]);
-
-  // Join-from-URL: ?route=FIREBASE_ID — user opened a shared co-pilot link.
-  const joinedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (joinedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const joinId = params.get('route');
-    if (!joinId) return;
-    joinedRef.current = true;
-    (async () => {
-      try {
-        const r = await loadRoute(joinId);
-        if (!r) return;
-        setSavedRoutes((rs) => {
-          const existing = rs.find(x => x.firebaseId === joinId);
-          if (existing) {
-            setActiveRouteId(existing.id);
-            return rs;
-          }
-          const id = `rm-shared-${joinId.slice(0, 6)}`;
-          setActiveRouteId(id);
-          return [...rs, { id, name: r.name || 'Paylaşılan Rota', city: r.city || city, firebaseId: joinId }];
-        });
-        if (Array.isArray(r.places)) {
-          lastSyncedJSON.current = JSON.stringify(r.places);
-          setPlaces(r.places);
-        }
-        setShareToast('✓ Yardımcı pilot olarak katıldınız');
-        setTimeout(() => setShareToast(''), 2500);
-      } catch (e) {
-        console.warn('[copilot] join failed — running offline', e);
-      }
-    })();
-  }, []);
-
-  // Shareable URL for co-pilots — based on firebaseId when available.
-  const shareUrl = (() => {
-    const fbId = activeRoute?.firebaseId;
-    if (fbId) return `https://turkishtoute.vercel.app/?route=${fbId}`;
-    return `https://turkishtoute.vercel.app/?route=${activeRouteId}`;
-  })();
-
   const commitRouteName = () => {
     const v = routeNameDraft.trim() || activeRoute.name;
     setSavedRoutes(rs => rs.map(r => r.id === activeRouteId ? { ...r, name: v } : r));
@@ -828,29 +916,8 @@ function RouteBuilderPage({ go, summary }) {
                 kind === 'png' ? 'Görsel olarak indiriliyor…' :
                                  '✓ Bağlantı kopyalandı';
     setShareToast(msg);
-    if (kind === 'copy') navigator.clipboard?.writeText(shareUrl).catch(() => {});
+    if (kind === 'copy') navigator.clipboard?.writeText('https://thyroute.com/r/' + activeRouteId).catch(() => {});
     setTimeout(() => setShareToast(''), 2200);
-  };
-
-  const [sendingReport, setSendingReport] = React.useState(false);
-  const sendReport = async () => {
-    const email = prompt('Rapor gönderilecek e-posta adresini girin:');
-    if (!email) return;
-    setSendingReport(true);
-    try {
-      const routedPlaces = places.filter(p => p.inRoute && p.order != null).sort((a, b) => a.order - b.order);
-      await sendTripReport({
-        to: email,
-        name: email.split('@')[0],
-        trip: { city, days: 3, places: routedPlaces, totalMiles },
-      });
-      setShareToast('✓ Rapor e-posta olarak gönderildi');
-    } catch (e) {
-      setShareToast('✗ Rapor gönderilemedi: ' + e.message);
-    } finally {
-      setSendingReport(false);
-      setTimeout(() => setShareToast(''), 3000);
-    }
   };
 
   // close menus on outside click
@@ -903,6 +970,39 @@ function RouteBuilderPage({ go, summary }) {
         id: newId, name: `Yeni Durak ${newId}`, cat: 'other', catLabel: 'Kullanıcı pini',
         x: pt.x, y: pt.y, rating: 0, duration: '—', time: `${(9 + order) % 23}:00`,
         partner: false, inRoute: true, order,
+      }];
+    });
+  };
+
+  /**
+   * Add a place coming from RealMap (Google Maps). Receives the rich
+   * Places Details payload (`name`, `lat`, `lng`, `rating`, `types`,
+   * `address`) and turns it into the same shape as the local catalogue.
+   */
+  const addPlaceFromMap = (gp) => {
+    setPlaces((prev) => {
+      const newId = Math.max(0, ...prev.map(p => p.id)) + 1;
+      const order = prev.filter(p => p.inRoute).length;
+      const time = `${(9 + order) % 23}:00`;
+      // map google place types -> our internal categories
+      const types = gp.types || [];
+      let cat = 'other', catLabel = 'Yer';
+      if (types.some(t => /restaurant|food|cafe|bar/.test(t))) { cat = 'rest';   catLabel = 'Restoran'; }
+      else if (types.some(t => /museum|gallery/.test(t)))       { cat = 'museum'; catLabel = 'Müze'; }
+      else if (types.some(t => /lodging|hotel/.test(t)))        { cat = 'hotel';  catLabel = 'Otel'; }
+      else if (types.some(t => /store|shop|shopping/.test(t)))  { cat = 'shop';   catLabel = 'Alışveriş'; }
+      else if (types.some(t => /tourist_attraction|point_of_interest|landmark/.test(t))) { cat = 'view'; catLabel = 'Manzara / Gezilecek yer'; }
+      return [...prev, {
+        id: newId,
+        name: gp.name || 'Yeni Durak',
+        cat, catLabel,
+        x: 400, y: 300, // SVG fallback coords — unused by RealMap, kept for FakeMap parity
+        lat: gp.lat, lng: gp.lng,
+        rating: gp.rating || 0,
+        duration: '1sa', time,
+        partner: false, inRoute: true, order,
+        placeId: gp.placeId,
+        address: gp.address,
       }];
     });
   };
@@ -1067,13 +1167,12 @@ function RouteBuilderPage({ go, summary }) {
                 )}
               </div>
 
-              <button onClick={sendReport} disabled={sendingReport} style={{
+              <button style={{
                 padding: '10px 14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff',
                 borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                opacity: sendingReport ? 0.6 : 1,
               }}>
-                <RBIcon.mail size={14} /> {sendingReport ? 'Gönderiliyor…' : t('rb.report')}
+                <RBIcon.mail size={14} /> {t('rb.report')}
               </button>
             </div>
           </div>
@@ -1090,28 +1189,26 @@ function RouteBuilderPage({ go, summary }) {
         )}
       </div>
 
-      {/* main 2-col layout */}
-      <div style={{ margin: '0 auto', padding: '14px 12px 14px 20px', display: 'grid', gridTemplateColumns: '1fr 540px', gap: 12, height: 'calc(100vh - 70px - 96px - 60px)' }}>
+      {/* main 2-col layout — sidebar tightened so map can breathe */}
+      <div style={{ margin: '0 auto', padding: '14px 12px 14px 16px', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 12, height: 'calc(100vh - 70px - 96px - 60px)' }}>
         <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 20px rgba(10,22,40,0.06)' }}>
-          {useReal ? (
-            <RealMap
-              places={places}
-              selectedId={selectedId}
-              onSelectPlace={setSelectedId}
-              onAddPoint={addPointFromMap}
-              copilots={copilots}
-              city={city}
-              onFail={() => setUseReal(false)}
-            />
-          ) : (
-            <FakeMap
-              places={places}
-              selectedId={selectedId}
-              onSelectPlace={setSelectedId}
-              onAddPoint={addPointFromMap}
-              copilots={copilots}
-            />
-          )}
+          <RealMap
+            city={city}
+            places={places}
+            selectedId={selectedId}
+            onSelectPlace={setSelectedId}
+            onAddPlace={addPlaceFromMap}
+            copilots={copilots}
+            fallback={
+              <FakeMap
+                places={places}
+                selectedId={selectedId}
+                onSelectPlace={setSelectedId}
+                onAddPoint={addPointFromMap}
+                copilots={copilots}
+              />
+            }
+          />
         </div>
         <div style={{ background: '#fff', borderRadius: 12, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(10,22,40,0.06)', overflow: 'hidden' }}>
           {/* tabs */}
@@ -1131,7 +1228,7 @@ function RouteBuilderPage({ go, summary }) {
             {tab === 'route'   && <DayPlan places={places} onRemove={removeFromRoute} onReorder={reorder} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'places'  && <PlacesBrowser places={places} onAdd={addToRoute} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'miles'   && <MilesPanel places={places} onAdd={addToRoute} />}
-            {tab === 'copilot' && <CoPilotPanel copilots={copilots} onInvite={()=>{}} link={shareUrl} />}
+            {tab === 'copilot' && <CoPilotPanel copilots={copilots} onInvite={()=>{}} link="https://thyroute.com/r/rm-9k4Xa-2qf" />}
           </div>
         </div>
       </div>
