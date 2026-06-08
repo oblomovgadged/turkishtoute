@@ -4,6 +4,7 @@ import { Icon as RIcon } from '../icons.jsx';
 import { SectionHeader as RSec } from '../shell.jsx';
 import { searchFlights } from '../services/flights.js';
 import { calcEarnedMiles } from '../services/miles.js';
+import { MultiCityResultsPage } from './MultiCityResults.jsx';
 
 /* THY Route — Results: 3-step tracker, round-trip flow, Economy/Business detail */
 const ResultsDS = window.THYRouteDesignSystem_cb84b4;
@@ -594,6 +595,11 @@ function FlightList({ search, leg, money, onContinue, onModify, isReturn = false
    ResultsPage — orchestrates the 2-leg flow
    ────────────────────────────────────────────── */
 function ResultsPage({ go, search }) {
+  // Multi-city (Türkiye Turu) takes a totally different layout — hand off.
+  if (search?.trip === 'multi' || search?.tour) {
+    return <MultiCityResultsPage go={go} search={search} />;
+  }
+
   const t = useT();
   const money = useMoney();
   const trip = search?.trip || 'round';
