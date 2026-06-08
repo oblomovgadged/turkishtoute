@@ -26,6 +26,11 @@ function App() {
       setRoute(h);
     };
     window.addEventListener('hashchange', apply);
+    // Co-pilot deep link: ?route=FIREBASE_ID → open Route Builder (it reads the param itself)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('route') && !window.location.hash) {
+      window.location.hash = 'route';
+    }
     apply();
     return () => window.removeEventListener('hashchange', apply);
   }, []);

@@ -3,7 +3,7 @@ import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
 import { sendTripReport } from '../services/emailjs.js';
-import { watchAuth, saveRoute, updateRoutePlaces } from '../services/firebase.js';
+import { watchAuth, saveRoute, updateRoutePlaces, subscribeRoute, loadRoute } from '../services/firebase.js';
 import { loadMaps, drawRoute } from '../services/maps.js';
 
 /* Cockpit-themed Google Maps style (THY navy aviation aesthetic) */
@@ -718,9 +718,15 @@ function RouteBuilderPage({ go, summary }) {
   const [currentUser, setCurrentUser] = React.useState(null);
   React.useEffect(() => watchAuth((u) => setCurrentUser(u)), []);
 
+  // Echo-cancellation: tracks JSON of last places synced (in either direction).
+  // Prevents auto-save↔snapshot infinite loop.
+  const lastSyncedJSON = React.useRef('');
+
   // Auto-save active route to Firestore (debounced 1500ms). Silent — no toast.
   React.useEffect(() => {
     if (!currentUser) return;
+    const placesJSON = JSON.stringify(places);
+    if (placesJSON === lastSyncedJSON.current) return; // already in-sync (came from snapshot)
     const timer = setTimeout(async () => {
       try {
         const active = savedRoutes.find(r => r.id === activeRouteId);
@@ -735,12 +741,69 @@ function RouteBuilderPage({ go, summary }) {
             setSavedRoutes(rs => rs.map(r => r.id === activeRouteId ? { ...r, firebaseId: newId } : r));
           }
         }
+        lastSyncedJSON.current = placesJSON;
       } catch (e) {
         console.warn('[firebase] auto-save failed', e);
       }
     }, 1500);
     return () => clearTimeout(timer);
   }, [places, currentUser, activeRouteId, savedRoutes, city]);
+
+  // Real-time co-pilot sync: subscribe to active route in Firestore.
+  React.useEffect(() => {
+    const active = savedRoutes.find(r => r.id === activeRouteId);
+    const fbId = active?.firebaseId;
+    if (!fbId || !currentUser) return;
+    const unsub = subscribeRoute(fbId, (route) => {
+      if (!Array.isArray(route.places)) return;
+      const remoteJSON = JSON.stringify(route.places);
+      if (remoteJSON === lastSyncedJSON.current) return; // echo from our own write
+      lastSyncedJSON.current = remoteJSON;
+      setPlaces(route.places);
+    });
+    return () => { try { unsub?.(); } catch (e) {} };
+  }, [activeRouteId, currentUser, savedRoutes]);
+
+  // Join-from-URL: ?route=FIREBASE_ID — user opened a shared co-pilot link.
+  const joinedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (joinedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const joinId = params.get('route');
+    if (!joinId) return;
+    joinedRef.current = true;
+    (async () => {
+      try {
+        const r = await loadRoute(joinId);
+        if (!r) return;
+        setSavedRoutes((rs) => {
+          const existing = rs.find(x => x.firebaseId === joinId);
+          if (existing) {
+            setActiveRouteId(existing.id);
+            return rs;
+          }
+          const id = `rm-shared-${joinId.slice(0, 6)}`;
+          setActiveRouteId(id);
+          return [...rs, { id, name: r.name || 'Paylaşılan Rota', city: r.city || city, firebaseId: joinId }];
+        });
+        if (Array.isArray(r.places)) {
+          lastSyncedJSON.current = JSON.stringify(r.places);
+          setPlaces(r.places);
+        }
+        setShareToast('✓ Yardımcı pilot olarak katıldınız');
+        setTimeout(() => setShareToast(''), 2500);
+      } catch (e) {
+        console.warn('[copilot] join failed — running offline', e);
+      }
+    })();
+  }, []);
+
+  // Shareable URL for co-pilots — based on firebaseId when available.
+  const shareUrl = (() => {
+    const fbId = activeRoute?.firebaseId;
+    if (fbId) return `https://turkishtoute.vercel.app/?route=${fbId}`;
+    return `https://turkishtoute.vercel.app/?route=${activeRouteId}`;
+  })();
 
   const commitRouteName = () => {
     const v = routeNameDraft.trim() || activeRoute.name;
@@ -765,7 +828,7 @@ function RouteBuilderPage({ go, summary }) {
                 kind === 'png' ? 'Görsel olarak indiriliyor…' :
                                  '✓ Bağlantı kopyalandı';
     setShareToast(msg);
-    if (kind === 'copy') navigator.clipboard?.writeText('https://thyroute.com/r/' + activeRouteId).catch(() => {});
+    if (kind === 'copy') navigator.clipboard?.writeText(shareUrl).catch(() => {});
     setTimeout(() => setShareToast(''), 2200);
   };
 
@@ -1068,7 +1131,7 @@ function RouteBuilderPage({ go, summary }) {
             {tab === 'route'   && <DayPlan places={places} onRemove={removeFromRoute} onReorder={reorder} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'places'  && <PlacesBrowser places={places} onAdd={addToRoute} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'miles'   && <MilesPanel places={places} onAdd={addToRoute} />}
-            {tab === 'copilot' && <CoPilotPanel copilots={copilots} onInvite={()=>{}} link="https://thyroute.com/r/rm-9k4Xa-2qf" />}
+            {tab === 'copilot' && <CoPilotPanel copilots={copilots} onInvite={()=>{}} link={shareUrl} />}
           </div>
         </div>
       </div>
