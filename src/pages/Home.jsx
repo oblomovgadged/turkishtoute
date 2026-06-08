@@ -3,6 +3,7 @@ import { useT } from '../i18n.jsx';
 import { Icon } from '../icons.jsx';
 import { HeroBg, SectionHeader } from '../shell.jsx';
 import { searchAirports } from '../data/airports.js';
+import { TOUR_PACKAGES, findCity, buildTour } from '../data/turkeyTour.js';
 
 /* THY Route — Home page (hero with search, how it works, popular routes, partners) */
 const HomeDS = window.THYRouteDesignSystem_cb84b4;
@@ -40,7 +41,12 @@ function HomeBookingCard({ onSearch }) {
       {/* Trip type radios */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          {[['round', t('search.round')], ['oneway', t('search.oneway')], ['stop', t('search.stop')], ['multi', t('search.multi')]].map(([k, l]) => (
+          {[
+            ['round', t('search.round')],
+            ['oneway', t('search.oneway')],
+            ['stop', t('search.stop')],
+            ['multi', 'Türkiye Turu'],
+          ].map(([k, l]) => (
             <Radio key={k} label={l} checked={trip === k} onClick={() => setTrip(k)} />
           ))}
         </div>
@@ -50,7 +56,8 @@ function HomeBookingCard({ onSearch }) {
         </label>
       </div>
 
-      {/* Inline grid */}
+      {/* Inline grid — standard mode */}
+      {trip !== 'multi' && (
       <div style={{ display: 'flex', position: 'relative', background: '#F3F5F8', border: '1px solid #E2E8F0', borderRadius: 6 }}>
         <Cell w="24%" first onClick={() => { setShowFrom(true); setShowTo(false); setShowDates(false); setShowPax(false); }}>
           <Lbl>{t('search.from')}</Lbl>
@@ -94,6 +101,10 @@ function HomeBookingCard({ onSearch }) {
           {t('search.cta')}
         </button>
       </div>
+      )}
+
+      {/* Turkey Tour mode — multi-city package picker */}
+      {trip === 'multi' && <TurkeyTourPanel from={from} setFrom={setFrom} onSearch={(tour) => onSearch({ trip: 'multi', from, tour, dates, pax })} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
         <div style={{ display: 'flex', gap: 24 }}>
@@ -321,6 +332,185 @@ function PaxPopover({ pax, setPax, onClose }) {
             }}>{c}</button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Türkiye Turu panel — multi-city package picker ---------- */
+function TurkeyTourPanel({ from, setFrom, onSearch }) {
+  const [packageId, setPackageId] = React.useState(TOUR_PACKAGES[0].id);
+  const [totalDays, setTotalDays] = React.useState(TOUR_PACKAGES[0].defaultDays);
+  const [showFrom, setShowFrom] = React.useState(false);
+  const [startDate] = React.useState('1 Temmuz 2026');
+
+  // Rebuild the tour preview whenever the inputs change. Days redistribute
+  // proportionally across the chosen package's cities.
+  const tour = React.useMemo(
+    () => buildTour({ packageId, totalDays, fromCity: from, startDate }),
+    [packageId, totalDays, from, startDate],
+  );
+
+  // When user picks a new package, snap totalDays to its default.
+  const pickPackage = (id) => {
+    setPackageId(id);
+    const p = TOUR_PACKAGES.find(x => x.id === id);
+    if (p) setTotalDays(p.defaultDays);
+  };
+
+  return (
+    <div>
+      {/* Top row: origin + total days + start date */}
+      <div style={{ display: 'flex', background: '#F3F5F8', border: '1px solid #E2E8F0', borderRadius: 6, position: 'relative' }}>
+        <Cell w="36%" first onClick={() => setShowFrom(true)}>
+          <Lbl>NEREDEN</Lbl>
+          <Val>{from.city} <Mono>({from.code})</Mono></Val>
+          <Sub>Yurt dışı çıkış noktanız</Sub>
+          {showFrom && <Dropdown items={[]} onPick={(c) => { setFrom(c); setShowFrom(false); }} onClose={() => setShowFrom(false)} />}
+        </Cell>
+        <Cell w="24%">
+          <Lbl>TOPLAM SÜRE</Lbl>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="number" min="5" max="45" value={totalDays} onChange={(e) => setTotalDays(Math.min(45, Math.max(5, parseInt(e.target.value, 10) || 5)))}
+              style={{
+                width: 56, border: '1px solid #E2E8F0', borderRadius: 4, background: '#fff',
+                padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 800,
+                color: 'var(--thy-navy)', textAlign: 'center', outline: 'none',
+              }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--thy-navy)' }}>gün</span>
+          </div>
+          <Sub>5–45 gün arası</Sub>
+        </Cell>
+        <Cell w="24%">
+          <Lbl>BAŞLANGIÇ TARİHİ</Lbl>
+          <Val>{startDate}</Val>
+          <Sub>Otomatik planın başlangıcı</Sub>
+        </Cell>
+        <button onClick={() => onSearch(tour)} style={{
+          width: '16%', background: 'var(--thy-red-light)', color: '#fff',
+          fontWeight: 700, fontSize: 14, border: 'none',
+          borderTopRightRadius: 6, borderBottomRightRadius: 6, cursor: 'pointer',
+          fontFamily: 'var(--font-ui)', transition: 'background .2s',
+        }} onMouseEnter={(e)=>e.currentTarget.style.background='var(--thy-red)'} onMouseLeave={(e)=>e.currentTarget.style.background='var(--thy-red-light)'}>
+          Tur oluştur →
+        </button>
+      </div>
+
+      {/* Package picker cards */}
+      <div style={{ marginTop: 22 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, color: '#64748B', marginBottom: 12 }}>
+          TUR PAKETİ SEÇİN
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {TOUR_PACKAGES.map((p) => (
+            <PackageCard key={p.id} pkg={p} active={packageId === p.id} onPick={() => pickPackage(p.id)} totalDays={packageId === p.id ? totalDays : p.defaultDays} />
+          ))}
+        </div>
+      </div>
+
+      {/* Selected tour preview — segments + intercity flights */}
+      <TourPreview tour={tour} />
+    </div>
+  );
+}
+
+function PackageCard({ pkg, active, onPick, totalDays }) {
+  const cities = pkg.citySlugs.map(findCity).filter(Boolean);
+  return (
+    <button onClick={onPick} style={{
+      position: 'relative', textAlign: 'left', padding: 16, borderRadius: 10,
+      border: `2px solid ${active ? pkg.accent : '#E2E8F0'}`,
+      background: active ? `${pkg.accent}0D` : '#fff',
+      cursor: 'pointer', transition: 'all .15s', overflow: 'hidden',
+    }}>
+      {pkg.tag && (
+        <span style={{
+          position: 'absolute', top: 12, right: 12,
+          fontSize: 9, fontWeight: 800, letterSpacing: 1.2,
+          padding: '3px 8px', borderRadius: 3,
+          background: active ? pkg.accent : '#F3F5F8',
+          color: active ? '#fff' : '#64748B',
+        }}>{pkg.tag}</span>
+      )}
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 800, color: pkg.accent, letterSpacing: 1.5, marginBottom: 6 }}>{pkg.subtitle.toUpperCase()}</div>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 800, color: 'var(--thy-navy)', marginBottom: 8 }}>{pkg.name}</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
+        {cities.map((c, i) => (
+          <React.Fragment key={c.iata}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--thy-navy)',
+              padding: '3px 7px', background: '#F3F5F8', borderRadius: 3,
+            }}>{c.city}</span>
+            {i < cities.length - 1 && <Icon.arrowRight size={11} style={{ color: '#94A3B8', alignSelf: 'center' }} />}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: '#64748B', lineHeight: 1.5, marginBottom: 8 }}>{pkg.description}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 800, color: '#94A3B8', letterSpacing: 0.5 }}>
+          {cities.length} şEHİR · {totalDays} GÜN
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: active ? pkg.accent : '#94A3B8' }}>
+          {active ? '✓ SEÇİLİ' : 'Seç'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function TourPreview({ tour }) {
+  const { segments, flights, totalDays } = tour;
+  const intercity = flights.filter(f => f.kind === 'intercity');
+  return (
+    <div style={{ marginTop: 22, padding: '20px 22px', background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, color: 'var(--thy-red)' }}>OTOMATİK PLAN</div>
+          <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
+            {totalDays} gün, {segments.length} şehir, {intercity.length} yurt içi uçuş
+          </div>
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#94A3B8', fontWeight: 700 }}>
+          ŞEHİRLER ARASI UÇUŞU OTOMATİK SEÇERİZ
+        </div>
+      </div>
+      {/* Horizontal segment timeline */}
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, position: 'relative' }}>
+        {segments.map((seg, i) => (
+          <React.Fragment key={seg.iata}>
+            <div style={{
+              flex: seg.days, minWidth: 110, padding: '12px 14px',
+              background: '#fff', border: '1px solid #E2E8F0',
+              borderRadius: 8, position: 'relative',
+            }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 800, color: '#94A3B8', letterSpacing: 1.5 }}>{seg.iata}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--thy-navy)', marginTop: 2 }}>{seg.city}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 800, color: 'var(--thy-red)', marginTop: 4 }}>
+                {seg.days} gün
+              </div>
+            </div>
+            {i < segments.length - 1 && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                padding: '0 8px', minWidth: 80,
+              }}>
+                <div style={{
+                  fontSize: 8, fontWeight: 800, letterSpacing: 1,
+                  padding: '2px 6px', borderRadius: 3,
+                  background: intercity[i]?.carrier === 'AJ' ? '#FFB81C' : 'var(--thy-red)',
+                  color: '#fff',
+                }}>{intercity[i]?.carrier === 'AJ' ? 'AnadoluJet' : 'THY'}</div>
+                <div style={{ width: 60, height: 1, background: '#CBD5E1', position: 'relative', margin: '6px 0' }}>
+                  <Icon.plane size={10} style={{
+                    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%) rotate(45deg)',
+                    color: 'var(--thy-navy)', background: '#F8FAFC',
+                  }} />
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#64748B', fontWeight: 700 }}>{intercity[i]?.flightNo}</div>
+              </div>
+            )}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
