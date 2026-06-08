@@ -31,7 +31,11 @@ function HomeBookingCard({ onSearch }) {
     <div style={{
       width: '100%', background: '#fff', borderRadius: 8,
       padding: 24, boxShadow: '0 20px 50px rgba(0,0,0,0.22), 0 2px 0 rgba(255,255,255,0.4) inset',
-      color: 'var(--thy-navy)', position: 'relative',
+      color: 'var(--thy-navy)',
+      position: 'relative',
+      // Float above the next section so the airport autocomplete dropdown
+      // is never clipped by sibling content.
+      zIndex: 50,
     }}>
       {/* Trip type radios */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
@@ -172,7 +176,10 @@ function Dropdown({ items, onPick, onClose }) {
     <div className="popover" onClick={(e)=>e.stopPropagation()} style={{
       position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 380,
       background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 40, padding: 12, maxHeight: 420, overflow: 'hidden',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.18)',
+      // Sit above the page's stacking context — hero + sections below.
+      zIndex: 9999,
+      padding: 12, maxHeight: 420, overflow: 'hidden',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: '#F3F5F8', marginBottom: 8 }}>
         <Icon.search size={14} stroke={2.5} />
@@ -242,7 +249,7 @@ function DatesPopover({ onPick, onClose, trip }) {
     <div className="popover" onClick={(e)=>e.stopPropagation()} style={{
       position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 620,
       background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 40, padding: 16,
+      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 9999, padding: 16,
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         {months.map((m, idx) => (
@@ -297,7 +304,7 @@ function PaxPopover({ pax, setPax, onClose }) {
     <div className="popover" onClick={(e)=>e.stopPropagation()} style={{
       position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 300,
       background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 40, padding: 16,
+      boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 9999, padding: 16,
     }}>
       {row('Yetişkin', 'adult')}
       {row('Çocuk (2-11)', 'child')}

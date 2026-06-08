@@ -303,6 +303,17 @@ function AccountPage({ go }) {
                   color: 'var(--thy-navy)', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}><AIcon.download size={13} /> E-bilet</button>
+                <a href="https://www.turkishairlines.com/tr-tr/seyahat-bilgileri/rezervasyonum/" target="_blank" rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Rezervasyonu yönet (thy.com)"
+                  style={{
+                    padding: '10px 14px', background: '#fff', border: '1px solid #E2E8F0',
+                    color: 'var(--thy-navy)', borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none',
+                  }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--thy-red)'; e.currentTarget.style.color = 'var(--thy-red)'; }}
+                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = 'var(--thy-navy)'; }}>
+                  <AIcon.x size={12} /> İptal
+                </a>
               </div>
             </div>
           ))}

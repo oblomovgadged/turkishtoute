@@ -2,6 +2,7 @@ import React from 'react';
 import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
+import { downloadRoutePdf } from '../services/pdf.js';
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -912,12 +913,40 @@ function RouteBuilderPage({ go, summary }) {
   };
   const handleShare = (kind) => {
     setShowShare(false);
-    const msg = kind === 'pdf' ? 'PDF olarak indiriliyor…' :
-                kind === 'png' ? 'Görsel olarak indiriliyor…' :
-                                 '✓ Bağlantı kopyalandı';
-    setShareToast(msg);
-    if (kind === 'copy') navigator.clipboard?.writeText('https://thyroute.com/r/' + activeRouteId).catch(() => {});
-    setTimeout(() => setShareToast(''), 2200);
+
+    // Real share link: use Firestore route id if we have one, otherwise
+    // fall back to the local in-memory id so the link is at least unique
+    // to this browser session.
+    const routeKey = activeRoute?.firebaseId || activeRoute?.id || 'demo';
+    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'https://turkishtoute.vercel.app';
+    const url = `${origin}/?route=${encodeURIComponent(routeKey)}`;
+
+    if (kind === 'pdf') {
+      try {
+        downloadRoutePdf({
+          city,
+          routeName: activeRoute?.name,
+          places,
+          totalMiles,
+          daysCount: 3,
+          shareLink: url,
+        });
+        setShareToast('✓ PDF indiriliyor');
+      } catch (err) {
+        console.warn('[pdf] export failed', err);
+        setShareToast('PDF oluşturulamadı');
+      }
+    } else if (kind === 'png') {
+      // PNG export is not yet implemented — surface this honestly rather
+      // than silently noop'ing.
+      setShareToast('Görsel dışa aktarma yakında');
+    } else if (kind === 'copy') {
+      navigator.clipboard?.writeText(url).then(
+        () => setShareToast('✓ Bağlantı kopyalandı'),
+        () => setShareToast('Bağlantı kopyalanamadı'),
+      );
+    }
+    setTimeout(() => setShareToast(''), 2400);
   };
 
   // close menus on outside click
@@ -1228,7 +1257,13 @@ function RouteBuilderPage({ go, summary }) {
             {tab === 'route'   && <DayPlan places={places} onRemove={removeFromRoute} onReorder={reorder} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'places'  && <PlacesBrowser places={places} onAdd={addToRoute} onSelect={setSelectedId} selectedId={selectedId} />}
             {tab === 'miles'   && <MilesPanel places={places} onAdd={addToRoute} />}
-            {tab === 'copilot' && <CoPilotPanel copilots={copilots} onInvite={()=>{}} link="https://thyroute.com/r/rm-9k4Xa-2qf" />}
+            {tab === 'copilot' && (
+              <CoPilotPanel
+                copilots={copilots}
+                onInvite={()=>{}}
+                link={`${typeof window !== 'undefined' && window.location ? window.location.origin : 'https://turkishtoute.vercel.app'}/?route=${encodeURIComponent(activeRoute?.firebaseId || activeRoute?.id || 'demo')}`}
+              />
+            )}
           </div>
         </div>
       </div>
