@@ -2,6 +2,7 @@ import React from 'react';
 import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
+import { sendTripReport } from '../services/emailjs.js';
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -602,6 +603,27 @@ function RouteBuilderPage({ go, summary }) {
     setTimeout(() => setShareToast(''), 2200);
   };
 
+  const [sendingReport, setSendingReport] = React.useState(false);
+  const sendReport = async () => {
+    const email = prompt('Rapor gönderilecek e-posta adresini girin:');
+    if (!email) return;
+    setSendingReport(true);
+    try {
+      const routedPlaces = places.filter(p => p.inRoute && p.order != null).sort((a, b) => a.order - b.order);
+      await sendTripReport({
+        to: email,
+        name: email.split('@')[0],
+        trip: { city, days: 3, places: routedPlaces, totalMiles },
+      });
+      setShareToast('✓ Rapor e-posta olarak gönderildi');
+    } catch (e) {
+      setShareToast('✗ Rapor gönderilemedi: ' + e.message);
+    } finally {
+      setSendingReport(false);
+      setTimeout(() => setShareToast(''), 3000);
+    }
+  };
+
   // close menus on outside click
   React.useEffect(() => {
     if (!showRoutes && !showShare) return;
@@ -816,12 +838,13 @@ function RouteBuilderPage({ go, summary }) {
                 )}
               </div>
 
-              <button style={{
+              <button onClick={sendReport} disabled={sendingReport} style={{
                 padding: '10px 14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff',
                 borderRadius: 4, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
+                opacity: sendingReport ? 0.6 : 1,
               }}>
-                <RBIcon.mail size={14} /> {t('rb.report')}
+                <RBIcon.mail size={14} /> {sendingReport ? 'Gönderiliyor…' : t('rb.report')}
               </button>
             </div>
           </div>
