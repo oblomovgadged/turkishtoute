@@ -3,6 +3,7 @@ import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
 import { sendTripReport } from '../services/emailjs.js';
+import { watchAuth, saveRoute, updateRoutePlaces } from '../services/firebase.js';
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -575,6 +576,34 @@ function RouteBuilderPage({ go, summary }) {
   React.useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRoutes)); }, [savedRoutes]);
   React.useEffect(() => { localStorage.setItem('thyroute_active_route', activeRouteId); }, [activeRouteId]);
   React.useEffect(() => { setRouteNameDraft(activeRoute?.name || ''); }, [activeRouteId]);
+
+  // Firebase auth subscription
+  const [currentUser, setCurrentUser] = React.useState(null);
+  React.useEffect(() => watchAuth((u) => setCurrentUser(u)), []);
+
+  // Auto-save active route to Firestore (debounced 1500ms). Silent — no toast.
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const timer = setTimeout(async () => {
+      try {
+        const active = savedRoutes.find(r => r.id === activeRouteId);
+        if (!active) return;
+        if (active.firebaseId) {
+          await updateRoutePlaces(active.firebaseId, places);
+        } else {
+          const newId = await saveRoute(currentUser.uid, {
+            city, places, name: active.name,
+          });
+          if (newId) {
+            setSavedRoutes(rs => rs.map(r => r.id === activeRouteId ? { ...r, firebaseId: newId } : r));
+          }
+        }
+      } catch (e) {
+        console.warn('[firebase] auto-save failed', e);
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [places, currentUser, activeRouteId, savedRoutes, city]);
 
   const commitRouteName = () => {
     const v = routeNameDraft.trim() || activeRoute.name;

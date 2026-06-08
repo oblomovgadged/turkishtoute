@@ -1,13 +1,57 @@
 import React from 'react';
 import { useT as useTA } from '../i18n.jsx';
 import { Icon as AIcon } from '../icons.jsx';
+import { watchAuth, listUserRoutes } from '../services/firebase.js';
 
 /* THY Route — Account / Dashboard */
 const ADS = window.THYRouteDesignSystem_cb84b4;
 const { Button: ABtn } = ADS;
 
+const FALLBACK_SAVED_ROUTES = [
+  { id: 'rm-1', name: 'Roma Rotam',         city: 'Roma',      country: 'İtalya',     places: 6, miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
+  { id: 'rm-2', name: 'Paris Romantik',      city: 'Paris',     country: 'Fransa',     places: 8, miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
+  { id: 'rm-3', name: 'Barcelona Balıkavcı', city: 'Barselona', country: 'İspanya',    places: 5, miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
+  { id: 'rm-4', name: 'Tokyo Yolculuğu',     city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
+];
+
 function AccountPage({ go }) {
   const t = useTA();
+
+  // null = loading, array = data (real or fallback)
+  const [savedRoutes, setSavedRoutes] = React.useState(null);
+
+  React.useEffect(() => {
+    const unsub = watchAuth(async (user) => {
+      if (!user) { setSavedRoutes(FALLBACK_SAVED_ROUTES); return; }
+      try {
+        const data = await listUserRoutes(user.uid);
+        if (data && data.length) {
+          setSavedRoutes(data.map((r) => {
+            const placesArr = Array.isArray(r.places) ? r.places : [];
+            const miles = placesArr.filter(p => p?.partner).reduce((s, p) => s + (p.miles || 0), 0);
+            return {
+              id: r.id,
+              name: r.name || `${r.city || ''} Rotam`,
+              city: r.city || '—',
+              country: r.country || '',
+              places: placesArr.length,
+              miles,
+              days: r.days || 3,
+              color: r.color || 'linear-gradient(135deg, #6B7C93, #0F2244)',
+              updated: 'Az önce',
+            };
+          }));
+        } else {
+          setSavedRoutes(FALLBACK_SAVED_ROUTES);
+        }
+      } catch (e) {
+        console.warn('[firebase] listUserRoutes failed', e);
+        setSavedRoutes(FALLBACK_SAVED_ROUTES);
+      }
+    });
+    return unsub;
+  }, []);
+
   const upcoming = [
     { id: 1, from: 'IST', to: 'FCO', fromCity: 'İstanbul', toCity: 'Roma',     date: '13 Haziran 2026', flight: 'TK 1855', pnr: 'SBA47R', status: 'KONFIRME', daysLeft: 6, hasRoute: true },
     { id: 2, from: 'IST', to: 'BCN', fromCity: 'İstanbul', toCity: 'Barselona',date: '02 Eylül 2026',  flight: 'TK 1857', pnr: 'BX12K9', status: 'PLANLANIYOR', daysLeft: 87, hasRoute: false },
@@ -137,12 +181,9 @@ function AccountPage({ go }) {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#94A3B8' }}>4</span>
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-          {[
-            { id: 'rm-1', name: 'Roma Rotam',         city: 'Roma',      country: 'İtalya',     places: 6, miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
-            { id: 'rm-2', name: 'Paris Romantik',      city: 'Paris',     country: 'Fransa',     places: 8, miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
-            { id: 'rm-3', name: 'Barcelona Balıkavcı', city: 'Barselona', country: 'İspanya',    places: 5, miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
-            { id: 'rm-4', name: 'Tokyo Yolculuğu',     city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
-          ].map((r) => (
+          {savedRoutes === null ? (
+            <div style={{ color: 'var(--thy-navy)', padding: 20, fontSize: 13, fontWeight: 700 }}>Yükleniyor...</div>
+          ) : savedRoutes.map((r) => (
             <div key={r.id} style={{
               background: '#fff', borderRadius: 12, border: '1px solid #E2E8F0', overflow: 'hidden',
               transition: 'all .2s',
