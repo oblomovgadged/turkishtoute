@@ -2,6 +2,8 @@ import React from 'react';
 import { useT, useLang, useMoney } from '../i18n.jsx';
 import { Icon as RIcon } from '../icons.jsx';
 import { SectionHeader as RSec } from '../shell.jsx';
+import { searchFlights } from '../services/flights.js';
+import { calcEarnedMiles } from '../services/miles.js';
 
 /* THY Route — Results: 3-step tracker, round-trip flow, Economy/Business detail */
 const ResultsDS = window.THYRouteDesignSystem_cb84b4;
@@ -425,13 +427,55 @@ function FlightList({ search, leg, money, onContinue, onModify, isReturn = false
   const fromCity = isReturn ? (search?.to?.city || 'Roma')     : (search?.from?.city || 'İstanbul');
   const toCity   = isReturn ? (search?.from?.city || 'İstanbul'): (search?.to?.city   || 'Roma');
 
-  const flights = [
-    { id: 'a', airline: 'Turkish Airlines', code: 'TK 1855', dep: '07:35', arr: '09:15', from, to, fromCity, toCity, duration: '2sa 40dk', stops: 0, aircraft: 'Airbus A350-900 — Geniş gövde', co2: 142, seats: { eco: 24, biz: 5  }, price: { eco: '15.111', biz: '48.072' } },
-    { id: 'b', airline: 'Turkish Airlines', code: 'TK 1859', dep: '12:30', arr: '14:10', from, to, fromCity, toCity, duration: '2sa 40dk', stops: 0, aircraft: 'Airbus A321-200neo — Dar gövde',  co2: 138, seats: { eco: 18, biz: 0  }, price: { eco: '27.523', biz: '—' } },
-    { id: 'c', airline: 'Turkish Airlines', code: 'TK 1863', dep: '16:45', arr: '18:25', from, to, fromCity, toCity, duration: '2sa 40dk', stops: 0, aircraft: 'Airbus A350-900 — Geniş gövde', co2: 142, seats: { eco: 32, biz: 9  }, price: { eco: '15.111', biz: '41.039' } },
-    { id: 'd', airline: 'Turkish Airlines', code: 'TK 1873', dep: '21:30', arr: '23:20', from, to, fromCity, toCity, duration: '2sa 50dk', stops: 0, aircraft: 'Airbus A321neo',                  co2: 124, seats: { eco: 22, biz: 4  }, price: { eco: '18.450', biz: '52.209' } },
-    { id: 'e', airline: 'Turkish Airlines', code: 'TK 1867', dep: '19:05', arr: '21:05', from, to, fromCity, toCity, duration: '3sa 0dk',  stops: 1, aircraft: 'Boeing 737-800 / A321',           co2: 198, seats: { eco: 41, biz: 12 }, price: { eco: '14.290', biz: '38.980' } },
-  ];
+  /* Live flight fetch (Duffel via /api/flights, with stub fallback). */
+  const [flights, setFlights] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [source, setSource]   = React.useState('stub');
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    const date = (isReturn ? search?.returnDate : search?.date)
+      || new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    searchFlights({
+      from: { code: from, city: fromCity },
+      to:   { code: to,   city: toCity },
+      date,
+      pax:  { adult: search?.pax?.adult || 1 },
+    })
+      .then((r) => {
+        if (!alive) return;
+        // backfill missing city names from search context
+        const enriched = (r.flights || []).map((f) => ({
+          ...f,
+          fromCity: f.fromCity || fromCity,
+          toCity:   f.toCity   || toCity,
+          // Ensure both eco+biz price columns exist; if Duffel only returns one,
+          // synthesise a 2.55x business uplift so the UI still shows both cabins.
+          price: (() => {
+            const p = f.price || {};
+            const ecoNum = typeof p.eco === 'number' ? p.eco : null;
+            const bizNum = typeof p.biz === 'number' ? p.biz : null;
+            return {
+              eco: ecoNum != null ? Math.round(ecoNum).toLocaleString('tr-TR') : (p.eco || '—'),
+              biz: bizNum != null ? Math.round(bizNum).toLocaleString('tr-TR')
+                   : (ecoNum != null ? Math.round(ecoNum * 2.55).toLocaleString('tr-TR') : '—'),
+            };
+          })(),
+          seats: f.seats || { eco: null, biz: null },
+        }));
+        // Sort cheapest-first by default so the page renders sensibly
+        enriched.sort((a, b) => parseInt(String(a.price.eco).replace(/\./g, ''), 10) - parseInt(String(b.price.eco).replace(/\./g, ''), 10));
+        setFlights(enriched);
+        setSource(r.source || 'duffel');
+      })
+      .catch((err) => {
+        console.warn('[results] searchFlights failed', err);
+        if (alive) { setFlights([]); setSource('error'); }
+      })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [from, to, fromCity, toCity, isReturn, search?.date, search?.returnDate]);
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24 }}>
@@ -464,8 +508,20 @@ function FlightList({ search, leg, money, onContinue, onModify, isReturn = false
 
       <main>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#64748B' }}>
+          <div style={{ fontSize: 13, color: '#64748B', display: 'flex', alignItems: 'center', gap: 10 }}>
             <strong style={{ color: 'var(--thy-navy)', fontSize: 16 }}>{flights.length} uçuş</strong> bulundu
+            {source === 'duffel' && (
+              <span style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: 1, padding: '3px 8px',
+                background: 'rgba(34,197,94,0.12)', color: '#16A34A', borderRadius: 3,
+              }}>● CANLI VERİ</span>
+            )}
+            {source === 'stub' && !loading && (
+              <span style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: 1, padding: '3px 8px',
+                background: 'rgba(148,163,184,0.18)', color: '#64748B', borderRadius: 3,
+              }}>● ÖRNEK VERİ</span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['cheap', t('res.sort.cheap')], ['fast', t('res.sort.fast')], ['early', t('res.sort.early')]].map(([k, l]) => (
@@ -479,7 +535,28 @@ function FlightList({ search, leg, money, onContinue, onModify, isReturn = false
             ))}
           </div>
         </div>
-        {flights.map((f) => (
+        {loading && (
+          <div style={{
+            background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
+            padding: 40, textAlign: 'center', marginBottom: 12,
+          }}>
+            <div style={{ display: 'inline-block', width: 28, height: 28, borderRadius: '50%',
+              border: '3px solid #E2E8F0', borderTopColor: 'var(--thy-red)',
+              animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ marginTop: 12, fontSize: 13, color: '#64748B', fontWeight: 700 }}>
+              Uçuşlar yükleniyor…
+            </div>
+          </div>
+        )}
+        {!loading && flights.length === 0 && (
+          <div style={{
+            background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
+            padding: 40, textAlign: 'center', marginBottom: 12, color: '#64748B', fontSize: 14,
+          }}>
+            Bu güzergah için uçuş bulunamadı.
+          </div>
+        )}
+        {!loading && flights.map((f) => (
           <FlightRow
             key={f.id} flight={f}
             expanded={expandedId === f.id || !!selectedKind[f.id]}
@@ -501,7 +578,11 @@ function FlightList({ search, leg, money, onContinue, onModify, isReturn = false
           </span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--thy-navy)' }}>Miles&Smiles ile kazanın</div>
-            <div style={{ fontSize: 13, color: '#64748B' }}>Bu uçuştan <strong>2.840 mil</strong> kazanın ve indirimli bilet alın.</div>
+            <div style={{ fontSize: 13, color: '#64748B' }}>
+              Bu uçuştan <strong>{calcEarnedMiles(from, to, 'eco').miles.toLocaleString('tr-TR')} mil</strong> (Economy) veya{' '}
+              <strong>{calcEarnedMiles(from, to, 'biz').miles.toLocaleString('tr-TR')} mil</strong> (Business) kazanın
+              ve indirimli bilet alın.
+            </div>
           </div>
         </div>
       </main>
