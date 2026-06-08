@@ -19,6 +19,43 @@ const MUTED = [100, 116, 139];
 const GREY  = [226, 232, 240];
 
 /**
+ * jsPDF's built-in Helvetica is Latin-1 only — unicode chars like ğ, ş, ı
+ * come out as garbled &-escape sequences. Until we bundle a proper TTF
+ * font, transliterate Turkish chars to their ASCII equivalents so the
+ * output is at least readable on any printer.
+ */
+function tr(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/Ç/g, 'C').replace(/ç/g, 'c')
+    .replace(/Ğ/g, 'G').replace(/ğ/g, 'g')
+    .replace(/İ/g, 'I').replace(/ı/g, 'i')
+    .replace(/Ö/g, 'O').replace(/ö/g, 'o')
+    .replace(/Ş/g, 'S').replace(/ş/g, 's')
+    .replace(/Ü/g, 'U').replace(/ü/g, 'u');
+}
+
+/** Draw a small THY-style mark (red square with TR crane silhouette + wordmark). */
+function drawLogo(doc, x, y) {
+  // red square badge
+  doc.setFillColor(...RED);
+  doc.roundedRect(x, y, 26, 26, 3, 3, 'F');
+  // simplified crane mark inside (cross of white triangles)
+  doc.setFillColor(255, 255, 255);
+  doc.triangle(x + 7, y + 19, x + 13, y + 8,  x + 19, y + 19, 'F');
+  doc.triangle(x + 9, y + 16, x + 13, y + 11, x + 17, y + 16, 'F');
+  // Wordmark
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('TURKISH AIRLINES', x + 34, y + 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...GOLD);
+  doc.text('ROUTE', x + 34, y + 22);
+}
+
+/**
  * @param {object} opts
  *   - city        — destination city, e.g. "Roma"
  *   - routeName   — user-given name of the route
@@ -38,25 +75,27 @@ export function downloadRoutePdf({ city = 'Roma', routeName, places = [], totalM
   doc.setFillColor(...RED);
   doc.rect(0, 130, W, 30, 'F');
 
+  drawLogo(doc, 40, 36);
+
   doc.setTextColor(...GOLD);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text('THY ROUTE  ·  YOLCULUĞUN HER METREKARESİ', 40, 50);
+  doc.text(tr('YOLCULUGUN HER METREKARESI'), 40, 80);
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(28);
-  doc.text((routeName || `${city} Rotanız`).toUpperCase(), 40, 100);
+  doc.text(tr((routeName || `${city} Rotaniz`).toUpperCase()), 40, 110);
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${city} · ${daysCount} gün · ${places.filter(p => p.inRoute).length} durak`, 40, 122);
+  doc.text(tr(`${city} . ${daysCount} gun . ${places.filter(p => p.inRoute).length} durak`), 40, 148);
 
   /* -------- Mile chip on right -------- */
   doc.setFillColor(...GOLD);
   doc.roundedRect(W - 200, 70, 160, 50, 6, 6, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(8);
-  doc.text('TAHMINI MIL', W - 188, 88);
+  doc.text(tr('TAHMINI MIL'), W - 188, 88);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text(`+${totalMiles.toLocaleString('tr-TR')}`, W - 188, 110);
@@ -85,12 +124,12 @@ export function downloadRoutePdf({ city = 'Roma', routeName, places = [], totalM
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`GÜN ${dayIdx + 1}`, 60, y + 15);
+    doc.text(`GUN ${dayIdx + 1}`, 60, y + 15);
 
     doc.setTextColor(...NAVY);
     doc.setFontSize(11);
     doc.text(
-      `${['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'][dayIdx % 7]} · ${dayPlaces.length} durak`,
+      tr(`${['Pazartesi', 'Sali', 'Carsamba', 'Persembe', 'Cuma', 'Cumartesi', 'Pazar'][dayIdx % 7]} . ${dayPlaces.length} durak`),
       130, y + 15,
     );
 
@@ -100,9 +139,9 @@ export function downloadRoutePdf({ city = 'Roma', routeName, places = [], totalM
       startY: y,
       head: [['Saat', 'Yer', 'Kategori', 'Mil']],
       body: dayPlaces.map((p) => [
-        p.time || '—',
-        p.name,
-        p.catLabel || '',
+        tr(p.time || '—'),
+        tr(p.name),
+        tr(p.catLabel || ''),
         p.partner ? `+${p.miles.toLocaleString('tr-TR')}` : '—',
       ]),
       headStyles: { fillColor: GREY, textColor: NAVY, fontSize: 8, fontStyle: 'bold' },
@@ -130,7 +169,7 @@ export function downloadRoutePdf({ city = 'Roma', routeName, places = [], totalM
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
     doc.setFont('helvetica', 'normal');
-    doc.text('THY Route · Türk Hava Yolları A.O. iştiraki', 40, H - 32);
+    doc.text(tr('THY Route . Turk Hava Yollari A.O. istiraki'), 40, H - 32);
     doc.text(`Sayfa ${i} / ${pageCount}`, W - 80, H - 32);
     if (shareLink) {
       doc.setTextColor(...RED);
@@ -138,6 +177,6 @@ export function downloadRoutePdf({ city = 'Roma', routeName, places = [], totalM
     }
   }
 
-  const safe = (routeName || `${city}-Rotam`).replace(/[^a-z0-9-]/gi, '_');
+  const safe = tr((routeName || `${city}-Rotam`)).replace(/[^a-z0-9-]/gi, '_');
   doc.save(`THYRoute-${safe}.pdf`);
 }
