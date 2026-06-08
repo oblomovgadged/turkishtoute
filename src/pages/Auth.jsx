@@ -1,10 +1,42 @@
 import React from 'react';
 import { useT as useTAu } from '../i18n.jsx';
 import { Icon as AuIcon } from '../icons.jsx';
+import { signIn, signUp } from '../services/firebase.js';
 
 /* THY Route — Auth (sign in / sign up modal-style page) */
 function AuthPage({ go }) {
   const t = useTAu();
+  const [email, setEmail] = React.useState('TK-21 47 39 02');
+  const [password, setPassword] = React.useState('••••••••••');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+
+  const handleSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signIn(email, password);
+      go('account');
+    } catch (e) {
+      setError('Giriş başarısız: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signUp(email, password);
+      go('account');
+    } catch (e) {
+      setError('Hesap oluşturulamadı: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={{
       minHeight: 'calc(100vh - 70px)',
@@ -58,37 +90,40 @@ function AuthPage({ go }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748B', letterSpacing: 1 }}>{t('au.member').toUpperCase()}</span>
-              <input defaultValue="TK-21 47 39 02" style={{
+              <input value={email} onChange={(e) => setEmail(e.target.value)} style={{
                 padding: '12px 14px', border: '1px solid #E2E8F0', borderRadius: 6,
                 fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--thy-navy)', outline: 'none',
               }} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748B', letterSpacing: 1 }}>{t('au.password').toUpperCase()}</span>
-              <input type="password" defaultValue="••••••••••" style={{
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{
                 padding: '12px 14px', border: '1px solid #E2E8F0', borderRadius: 6,
                 fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--thy-navy)', outline: 'none',
               }} />
             </label>
             <a href="#" style={{ fontSize: 12, color: 'var(--thy-blue)', textAlign: 'right', fontWeight: 700, marginTop: -6 }}>{t('au.forgot')}</a>
-            <button onClick={() => go('account')} style={{
+            <button onClick={handleSignIn} disabled={loading} style={{
               padding: '14px 16px', background: 'var(--thy-red-light)', color: '#fff',
               border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 800, cursor: 'pointer',
               transition: 'background .15s',
             }} onMouseEnter={(e)=>e.target.style.background='var(--thy-red)'} onMouseLeave={(e)=>e.target.style.background='var(--thy-red-light)'}>
-              {t('au.signin')}
+              {loading ? 'Giriş yapılıyor...' : t('au.signin')}
             </button>
+            {error && (
+              <div style={{ color: 'var(--thy-red)', fontSize: 12, marginTop: 4 }}>{error}</div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0', color: '#94A3B8', fontSize: 11 }}>
             <span style={{ flex: 1, height: 1, background: '#E2E8F0' }} /> VEYA <span style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
           </div>
 
-          <button style={{
+          <button onClick={handleSignUp} disabled={loading} style={{
             width: '100%', padding: '12px 16px', background: '#fff',
             border: '1.5px solid var(--thy-navy)', color: 'var(--thy-navy)',
             borderRadius: 6, fontSize: 13, fontWeight: 800, cursor: 'pointer',
-          }}>{t('au.signup')}</button>
+          }}>{loading ? 'İşleniyor...' : t('au.signup')}</button>
 
           <div style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 24, lineHeight: 1.6 }}>
             🛡️ KVKK uyarınca veri güvenliği · 3D Secure · ISO 27001
