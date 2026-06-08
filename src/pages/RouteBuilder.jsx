@@ -4,6 +4,40 @@ import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
 import { sendTripReport } from '../services/emailjs.js';
 import { watchAuth, saveRoute, updateRoutePlaces } from '../services/firebase.js';
+import { loadMaps, drawRoute } from '../services/maps.js';
+
+/* Cockpit-themed Google Maps style (THY navy aviation aesthetic) */
+const COCKPIT_MAP_STYLE = [
+  { elementType: 'geometry',          stylers: [{ color: '#0A1628' }] },
+  { elementType: 'labels.text.fill',  stylers: [{ color: '#94A3B8' }] },
+  { elementType: 'labels.text.stroke',stylers: [{ color: '#0A1628' }] },
+  { featureType: 'water',          elementType: 'geometry',         stylers: [{ color: '#142D4F' }] },
+  { featureType: 'water',          elementType: 'labels.text.fill', stylers: [{ color: '#6B8AA8' }] },
+  { featureType: 'road',           elementType: 'geometry',         stylers: [{ color: '#1F3A5F' }] },
+  { featureType: 'road',           elementType: 'labels.text.fill', stylers: [{ color: '#94A3B8' }] },
+  { featureType: 'road.highway',   elementType: 'geometry',         stylers: [{ color: '#2A4A75' }] },
+  { featureType: 'poi',                                              stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit',                                          stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative', elementType: 'geometry',         stylers: [{ color: '#1F3A5F' }] },
+  { featureType: 'landscape',      elementType: 'geometry',         stylers: [{ color: '#0F1F38' }] },
+];
+
+/* City center coordinates (lat/lng) — used by RealMap as center and for SVG-coord conversion */
+const CITY_CENTERS = {
+  Roma:      { lat: 41.9028, lng: 12.4964, latSpan: 0.10, lngSpan: 0.15 },
+  Paris:     { lat: 48.8566, lng:  2.3522, latSpan: 0.10, lngSpan: 0.15 },
+  Barselona: { lat: 41.3851, lng:  2.1734, latSpan: 0.10, lngSpan: 0.15 },
+  Tokyo:     { lat: 35.6762, lng: 139.6503,latSpan: 0.10, lngSpan: 0.15 },
+};
+
+/* Convert SVG coords (0..800, 0..600) → lat/lng around a city center. */
+function svgToLatLng(x, y, city) {
+  const c = CITY_CENTERS[city] || CITY_CENTERS.Roma;
+  return {
+    lat: (c.lat + c.latSpan / 2) - (y / 600) * c.latSpan,
+    lng: (c.lng - c.lngSpan / 2) + (x / 800) * c.lngSpan,
+  };
+}
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -164,6 +198,108 @@ function FakeMap({ places, selectedId, onSelectPlace, onAddPoint, copilots }) {
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#C5A059' }} /> Mil partneri
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Real Google Maps (cockpit theme) — same interface as FakeMap ---------- */
+function RealMap({ places, selectedId, onSelectPlace, onAddPoint, copilots, city, onFail }) {
+  const ref = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const markersRef = React.useRef([]);
+  const polylineRef = React.useRef(null);
+  const googleRef = React.useRef(null);
+
+  const renderMarkersAndRoute = React.useCallback(() => {
+    const google = googleRef.current;
+    const map = mapRef.current;
+    if (!google || !map) return;
+
+    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+    if (polylineRef.current) { polylineRef.current.setMap(null); polylineRef.current = null; }
+
+    const routed = places.filter(p => p.inRoute && p.order != null).sort((a, b) => a.order - b.order);
+
+    places.forEach((p) => {
+      const { lat, lng } = svgToLatLng(p.x, p.y, city);
+      const isRouted = p.inRoute && p.order != null;
+      const isSelected = p.id === selectedId;
+      const num = isRouted ? String(p.order + 1) : '';
+      const fill = isRouted ? '#B7312C' : '#FFFFFF';
+      const stroke = isRouted ? '#B7312C' : (p.partner ? '#C5A059' : '#0F2244');
+      const textColor = isRouted ? '#FFFFFF' : stroke;
+      const r = isRouted ? 14 : 9;
+      const sw = isSelected ? 4 : 3;
+      const halo = isSelected ? `<circle cx="20" cy="20" r="19" fill="rgba(183,49,44,0.22)"/>` : '';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">${halo}<circle cx="20" cy="20" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/><text x="20" y="24" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" font-weight="800" fill="${textColor}">${num}</text></svg>`;
+
+      const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map,
+        title: p.name,
+        icon: {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(40, 40),
+          anchor: new google.maps.Point(20, 20),
+        },
+        zIndex: isSelected ? 999 : (isRouted ? 100 : 10),
+      });
+      marker.addListener('click', () => onSelectPlace(p.id));
+      markersRef.current.push(marker);
+    });
+
+    if (routed.length >= 2) {
+      const pts = routed.map(p => svgToLatLng(p.x, p.y, city));
+      polylineRef.current = drawRoute(google, map, pts);
+    }
+  }, [places, selectedId, city, onSelectPlace]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    loadMaps().then((google) => {
+      if (cancelled || !ref.current) return;
+      googleRef.current = google;
+      const c = CITY_CENTERS[city] || CITY_CENTERS.Roma;
+      mapRef.current = new google.maps.Map(ref.current, {
+        center: { lat: c.lat, lng: c.lng },
+        zoom: 13,
+        disableDefaultUI: false,
+        clickableIcons: false,
+        backgroundColor: '#0A1628',
+        styles: COCKPIT_MAP_STYLE,
+      });
+      mapRef.current.addListener('click', (e) => {
+        const lat = e.latLng.lat(), lng = e.latLng.lng();
+        const x = ((lng - (c.lng - c.lngSpan / 2)) / c.lngSpan) * 800;
+        const y = (((c.lat + c.latSpan / 2) - lat) / c.latSpan) * 600;
+        onAddPoint({ x: Math.round(x), y: Math.round(y) });
+      });
+      renderMarkersAndRoute();
+    }).catch((e) => {
+      console.warn('[maps] load failed — falling back to FakeMap', e);
+      if (!cancelled) onFail?.(e);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city]);
+
+  React.useEffect(() => {
+    if (mapRef.current) renderMarkersAndRoute();
+  }, [renderMarkersAndRoute]);
+
+  return (
+    <div style={{ position: 'relative', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#0A1628' }}>
+      <div ref={ref} style={{ width: '100%', height: '100%' }} />
+      <div style={{
+        position: 'absolute', top: 16, left: 16, padding: '8px 12px',
+        background: 'rgba(255,255,255,0.95)', border: '1px solid #E2E8F0',
+        borderRadius: 999, fontSize: 11, fontWeight: 700, color: 'var(--thy-navy)',
+        display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+      }}>
+        <RBIcon.plus size={12} stroke={3} /> Haritada bir yere tıklayın — rotaya eklensin
       </div>
     </div>
   );
@@ -551,6 +687,7 @@ function RouteBuilderPage({ go, summary }) {
   const [tab, setTab] = React.useState('route');
   const [selectedId, setSelectedId] = React.useState(1);
   const [tickShare, setTickShare] = React.useState(false);
+  const [useReal, setUseReal] = React.useState(Boolean(import.meta.env.VITE_GOOGLE_MAPS_KEY));
 
   // Multi-route management (persists in localStorage)
   const STORAGE_KEY = 'thyroute_saved_routes';
@@ -893,13 +1030,25 @@ function RouteBuilderPage({ go, summary }) {
       {/* main 2-col layout */}
       <div style={{ margin: '0 auto', padding: '14px 12px 14px 20px', display: 'grid', gridTemplateColumns: '1fr 540px', gap: 12, height: 'calc(100vh - 70px - 96px - 60px)' }}>
         <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 20px rgba(10,22,40,0.06)' }}>
-          <FakeMap
-            places={places}
-            selectedId={selectedId}
-            onSelectPlace={setSelectedId}
-            onAddPoint={addPointFromMap}
-            copilots={copilots}
-          />
+          {useReal ? (
+            <RealMap
+              places={places}
+              selectedId={selectedId}
+              onSelectPlace={setSelectedId}
+              onAddPoint={addPointFromMap}
+              copilots={copilots}
+              city={city}
+              onFail={() => setUseReal(false)}
+            />
+          ) : (
+            <FakeMap
+              places={places}
+              selectedId={selectedId}
+              onSelectPlace={setSelectedId}
+              onAddPoint={addPointFromMap}
+              copilots={copilots}
+            />
+          )}
         </div>
         <div style={{ background: '#fff', borderRadius: 12, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(10,22,40,0.06)', overflow: 'hidden' }}>
           {/* tabs */}
