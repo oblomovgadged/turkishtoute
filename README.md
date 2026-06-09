@@ -1,36 +1,23 @@
-# Mobile v1 — değişiklik paketi
+# Mobile v2 — küçük yama
 
-## Bu klasörde 5 dosya var. Hepsini repo köküne kopyalayın:
+## Sadece BİR dosya değişti.
 
-| Dosya | Yeni mi / Var mı | Ne yapıyor |
-|---|---|---|
-| `src/styles/mobile.css` | **YENİ** | Tüm mobil responsive media query'leri |
-| `src/MobileNav.jsx`     | **YENİ** | Alt tab bar (Ana sayfa · Keşfet · Rota · M&S · Hesabım) |
-| `src/main.jsx`          | Üzerine yaz | `mobile.css`'i import eder |
-| `src/App.jsx`           | Üzerine yaz | `<MobileNav>`'i render eder |
-| `index.html`            | Üzerine yaz | viewport-fit, theme-color, apple-mobile-web-app meta etiketleri |
+| Dosya | İşlem |
+|---|---|
+| `src/styles/mobile.css` | Üzerine yaz (v1'in üstüne) |
+
+## Ne düzeldi
+
+- **Üst bar:** "TURKISH AIRLINES" wordmark küçüldü, "ROUTE" altın rozeti gizlendi, "Hesabım" sadece ikon oldu — alt alta sığacak.
+- **Arama formu:** NEREDEN/NEREYE aynı satırda iki sütun, TARİH ve YOLCU/KABİN ayrı satırlarda, "Uçuş ara →" tam genişlikte alttan kırmızı buton.
 
 ## Kurulum
 
-```bash
-cd thy-route
-# bu 5 dosyayı kopyaladıktan sonra:
-npm run dev
-```
-
-Sonra:
-- Tarayıcı penceresini telefon boyutuna daraltın (≤ 768px)
-- VEYA cep telefonundan Vercel'deki canlı linki açın
-- Alt tab bar otomatik belirir
-- Üst nav otomatik gizlenir
-- Tüm gridler tek sütuna düşer
-
-## Sonra ne yapacağız
-
-Şu an "kaba" mobil katman. Bir sonraki adımda:
-- Home arama formu mobile-first hâle gelecek
-- RouteBuilder map full-screen + bottom sheet
-- Booking sayfası alt-üst dizim
-- Splash + onboarding (mobile prototipinden)
-
-Sen test ettikten sonra söyle, hangi sayfa öncelikli ondan başlayalım.
+1. Bu klasördeki `src/styles/mobile.css`'i bilgisayardaki projende aynı yere kopyala (üzerine yaz)
+2. PowerShell:
+   ```
+   git add .
+   git commit -m "fix: mobile header + search form layout"
+   git push
+   ```
+3. Vercel 1-2 dakikada deploy eder, telefondan tekrar aç.

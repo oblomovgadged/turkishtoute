@@ -57,24 +57,72 @@
   /* ─── Header compact on phone ─── */
   header[role="banner"], header.thy-header, body > div > header,
   body > div header:first-of-type {
-    padding: 0 14px !important;
-    height: 56px !important;
+    padding: 0 10px !important;
+    height: 52px !important;
   }
   header > div > nav {
     display: none !important;   /* desktop nav hidden */
   }
+  /* TURKISH AIRLINES wordmark too wide on phone — shrink it hard */
+  header img[src*="thy-logo-horizontal"] {
+    height: 18px !important;
+    max-width: 110px;
+    object-fit: contain;
+  }
+  /* The "ROUTE" gold pill next to the logo — hide on phone, save space */
+  header a > span {
+    display: none !important;
+  }
   /* Currency / lang chips — compact */
   header .cur-menu button,
   header > div > div:last-child > button {
-    padding: 5px 10px !important;
+    padding: 4px 8px !important;
     font-size: 10px !important;
+    gap: 3px !important;
   }
-  /* The "Hesabım" / account button on the right — collapse to icon */
-  header > div > div:last-child > button:last-child span {
-    display: none;
-  }
+  /* "Hesabım" / account button on the right — collapse to icon only */
   header > div > div:last-child > button:last-child {
-    padding: 6px 10px !important;
+    padding: 6px 8px !important;
+    font-size: 0 !important;          /* hides any text node */
+    gap: 0 !important;
+  }
+  header > div > div:last-child > button:last-child svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  /* Tighten the right-side button row */
+  header > div > div:last-child {
+    gap: 5px !important;
+  }
+
+  /* ─── Hero search card — force vertical stack ─── */
+  /* The search form has flex/grid columns (NEREDEN / NEREYE / TARİH / YOLCU)
+     plus a tall red CTA on the right. On phone, stack them and make the CTA
+     a full-width button at the bottom. */
+  form[role="search"], [data-search-card],
+  section[data-hero] form,
+  div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1.2fr 1.2fr 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  /* Inside the search card: split the IATA row (NEREDEN / NEREYE) into two columns */
+  [data-search-card] > [data-search-row] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  /* Big red "Uçuş ara →" CTA — full width, fixed height */
+  button[data-search-cta],
+  div[style*="grid-template-columns"] > button[style*="background: var(--thy-red"],
+  div[style*="grid-template-columns"] > button[style*="background:#B7312C"] {
+    width: 100% !important;
+    height: 56px !important;
+    border-radius: 8px !important;
+    font-size: 15px !important;
   }
 
   /* ─── Hero / large titles shrink ─── */
