@@ -627,7 +627,7 @@ function ResultsPage({ go, search }) {
   };
   const goRoute = () => {
     go('route', {
-      city: search?.to?.city || 'Roma',
+      city: search?.to?.city || 'İstanbul',
       flights: { out: outbound, ret: returnLeg },
     });
   };

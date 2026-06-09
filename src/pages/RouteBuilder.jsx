@@ -865,10 +865,14 @@ function RouteBuilderPage({ go, summary }) {
   const tour = summary?.tour || null;
   const [activeSeg, setActiveSeg] = React.useState(0);
 
-  // Active city: in multi mode it follows the selected segment tab.
+  // Active city: in multi mode it follows the selected segment tab. The
+  // Genel Bakış tab (activeSeg === -1) doesn't bind to one city — it shows
+  // the whole tour, so we keep `city` pointing at the first segment as a
+  // sensible fallback for any city-keyed state.
   const city = isMulti
-    ? (tour.segments[activeSeg]?.city || 'Roma')
-    : (summary?.city || 'Roma');
+    ? (tour.segments[activeSeg]?.city || tour.segments[0]?.city || 'İstanbul')
+    : (summary?.city || 'İstanbul');
+  const isOverview = isMulti && activeSeg === -1;
 
   // initial places — city-aware: each Turkish city ships its own 4-5
   // landmarks, single-city mode falls back to the Roma sample itinerary.
@@ -1120,7 +1124,7 @@ function RouteBuilderPage({ go, summary }) {
         <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div style={{ minWidth: 320 }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 800, color: 'var(--thy-gold-light)', letterSpacing: 2, marginBottom: 6 }}>
-              {t('rb.eyebrow')} · {city.toUpperCase()}
+              {t('rb.eyebrow')} · {isOverview ? 'GENEL BAKIŞ' : city.toUpperCase()}
             </div>
 
             {/* Route name (editable) + saved-routes dropdown */}
@@ -1143,7 +1147,11 @@ function RouteBuilderPage({ go, summary }) {
                   transition: 'border-color .15s',
                 }} onMouseEnter={(e) => e.currentTarget.style.borderBottomColor = 'rgba(197,160,89,0.5)'}
                    onMouseLeave={(e) => e.currentTarget.style.borderBottomColor = 'transparent'}>
-                  {activeRoute?.name || `${city} Rotanız`}
+                  {isOverview
+                    ? (tour?.packageName ? `${tour.packageName} — ${tour.totalDays} gün` : 'Türkiye Turu')
+                    : (activeRoute?.name?.includes('Roma') && city !== 'Roma'
+                        ? `${city} Rotanız`
+                        : (activeRoute?.name || `${city} Rotanız`))}
                 </h1>
               )}
               {/* Package badge in multi-city mode */}

@@ -219,13 +219,21 @@ function HeroBg({ children, tall = false }) {
   return (
     <div style={{
       position: 'relative',
+      // High stacking context so a dropdown opened inside the booking card
+      // visibly overlays the next-section content (e.g. "Nasıl Çalışır").
+      zIndex: 5,
+      position: 'relative',
       background: 'linear-gradient(165deg, #0A1628 0%, #142D4F 40%, #1A3A60 55%, #B7312C 85%, #E31837 100%)',
       minHeight: tall ? 540 : 360,
-      overflow: 'hidden',
+      // overflow:visible so the airport-search dropdown inside the booking
+      // card can extend below the hero's bottom edge. The image is clipped
+      // by clipPath on the <img> itself, so we don't need the outer hidden.
+      overflow: 'visible',
     }}>
       <img src="/assets/AnaEkran.png" alt="" aria-hidden style={{
         position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
         opacity: 0.22, pointerEvents: 'none', mixBlendMode: 'screen',
+        clipPath: 'inset(0)',
       }} />
       {/* subtle vignette */}
       <div aria-hidden style={{

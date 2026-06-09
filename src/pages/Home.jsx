@@ -36,7 +36,10 @@ function HomeBookingCard({ onSearch }) {
       position: 'relative',
       // Float above the next section so the airport autocomplete dropdown
       // is never clipped by sibling content.
-      zIndex: 50,
+      zIndex: 200,
+      // Establish an isolated stacking context so child dropdowns'
+      // z-index never has to fight the page's other sections.
+      isolation: 'isolate',
     }}>
       {/* Trip type radios */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
@@ -215,8 +218,8 @@ function Dropdown({ items, onPick, onClose }) {
       boxShadow: '0 20px 40px rgba(0,0,0,0.18)',
       // Sit above the page's stacking context — hero + sections below.
       zIndex: 9999,
-      padding: 12, maxHeight: 420, overflow: 'hidden',
-    }}>
+      padding: 12, maxHeight: 420, overflow: 'auto',
+    }} className="scroll-thin">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: '#F3F5F8', marginBottom: 8 }}>
         <Icon.search size={14} stroke={2.5} />
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Şehir, havalimanı adı veya IATA kodu"
@@ -275,12 +278,39 @@ function DatesPopover({ onPick, onClose, trip }) {
     setTimeout(() => document.addEventListener('click', h), 0);
     return () => document.removeEventListener('click', h);
   }, [onClose]);
-  const months = [
-    { name: 'Haziran', short: 'Haz' }, { name: 'Temmuz', short: 'Tem' },
-  ];
-  const daysIn = (idx) => idx === 0 ? 30 : 31;
-  const [go, setGo] = React.useState(13);
-  const [back, setBack] = React.useState(28);
+
+  // Generate two visible months starting from today. Past days inside the
+  // current month render disabled, future months are always enabled. This
+  // replaces the previously-hardcoded "Haziran/Temmuz 2026" pair which
+  // happily let users pick past dates.
+  const TR_MONTH = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const TR_MONTH_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const today = React.useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+  const months = React.useMemo(() => {
+    const out = [];
+    for (let i = 0; i < 2; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      out.push({
+        year: d.getFullYear(),
+        monthIdx: d.getMonth(),
+        name: TR_MONTH[d.getMonth()],
+        short: TR_MONTH_SHORT[d.getMonth()],
+        daysIn: new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(),
+        // 0 = Monday in our header. JS getDay: 0=Sun..6=Sat, so we shift.
+        firstWeekday: (new Date(d.getFullYear(), d.getMonth(), 1).getDay() + 6) % 7,
+      });
+    }
+    return out;
+  }, [today]);
+
+  // Selection state stored as JS Dates so disabled-past logic is trivial.
+  const [goDate,   setGoDate]   = React.useState(() => { const d = new Date(today); d.setDate(today.getDate() + 4); return d; });
+  const [backDate, setBackDate] = React.useState(() => { const d = new Date(today); d.setDate(today.getDate() + 19); return d; });
+
+  const fmt = (d) => `${d.getDate()} ${TR_MONTH_SHORT[d.getMonth()]}`;
+  const sameDay = (a, b) => a && b && a.toDateString() === b.toDateString();
+  const inRange = (d) => trip === 'round' && goDate && backDate && d > goDate && d < backDate;
+
   return (
     <div className="popover" onClick={(e)=>e.stopPropagation()} style={{
       position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 620,
@@ -288,32 +318,52 @@ function DatesPopover({ onPick, onClose, trip }) {
       boxShadow: '0 20px 40px rgba(0,0,0,0.18)', zIndex: 9999, padding: 16,
     }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        {months.map((m, idx) => (
-          <div key={m.name}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--thy-navy)', textAlign: 'center', marginBottom: 12 }}>{m.name} 2026</div>
+        {months.map((m) => (
+          <div key={`${m.year}-${m.monthIdx}`}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--thy-navy)', textAlign: 'center', marginBottom: 12 }}>{m.name} {m.year}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, fontSize: 11 }}>
               {['Pt','Sa','Ça','Pe','Cu','Ct','Pz'].map(d => <div key={d} style={{ textAlign: 'center', color: '#94A3B8', fontWeight: 700, padding: '6px 0' }}>{d}</div>)}
-              {Array.from({ length: daysIn(idx) }, (_, i) => i + 1).map(d => {
-                const isGo   = idx === 0 && d === go;
-                const isBack = idx === 0 && d === back && trip === 'round';
-                const isIn   = idx === 0 && d > go && d < back && trip === 'round';
+              {/* leading blanks so day 1 lands under its real weekday */}
+              {Array.from({ length: m.firstWeekday }, (_, i) => <div key={`b-${i}`} />)}
+              {Array.from({ length: m.daysIn }, (_, i) => i + 1).map(d => {
+                const cellDate = new Date(m.year, m.monthIdx, d);
+                const isPast   = cellDate < today;
+                const isGo     = sameDay(cellDate, goDate);
+                const isBack   = sameDay(cellDate, backDate) && trip === 'round';
+                const isIn     = inRange(cellDate);
                 return (
-                  <button key={d} onClick={() => {
-                    if (trip !== 'round') { setGo(d); onPick({ go: `${d} ${m.short}`, back: '' }); return; }
-                    if (d <= go) { setGo(d); }
-                    else { setBack(d); onPick({ go: `${go} ${m.short}`, back: `${d} ${m.short}` }); }
-                  }}
+                  <button key={d} disabled={isPast}
+                    onClick={() => {
+                      if (isPast) return;
+                      if (trip !== 'round') {
+                        setGoDate(cellDate);
+                        onPick({ go: fmt(cellDate), back: '' });
+                        return;
+                      }
+                      if (!goDate || cellDate <= goDate) {
+                        setGoDate(cellDate);
+                      } else {
+                        setBackDate(cellDate);
+                        onPick({ go: fmt(goDate), back: fmt(cellDate) });
+                      }
+                    }}
                     style={{
-                      padding: '8px 0', textAlign: 'center', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      padding: '8px 0', textAlign: 'center', fontSize: 12, fontWeight: 600,
+                      cursor: isPast ? 'not-allowed' : 'pointer',
                       border: 'none', borderRadius: 4,
                       background: isGo || isBack ? 'var(--thy-red)' : isIn ? 'rgba(183,49,44,0.1)' : 'transparent',
-                      color: isGo || isBack ? '#fff' : 'var(--thy-navy)',
+                      color: isPast ? '#CBD5E1' : (isGo || isBack ? '#fff' : 'var(--thy-navy)'),
+                      textDecoration: isPast ? 'line-through' : 'none',
+                      opacity: isPast ? 0.55 : 1,
                     }}>{d}</button>
                 );
               })}
             </div>
           </div>
         ))}
+      </div>
+      <div style={{ marginTop: 10, fontSize: 11, color: '#94A3B8', textAlign: 'center', borderTop: '1px solid #F1F5F9', paddingTop: 10 }}>
+        Geçmiş tarihler seçilemez · bugün {fmt(today)} {today.getFullYear()}
       </div>
     </div>
   );
