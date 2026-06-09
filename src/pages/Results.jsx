@@ -332,19 +332,19 @@ function FlightRow({ flight, expanded, onToggle, selectedKind, onSelect, money, 
         </button>
       </div>
 
-      {/* Airline meta row */}
+      {/* Airline meta row — always THY brand. Even when the backend
+          returns a real Duffel offer for another carrier (BA, LH, KL…),
+          THY Route is a Turkish Airlines product, so the chip is locked
+          to the THY identity. The real operating-carrier code is still
+          shown in the flight number (e.g. "BA 0107") for transparency. */}
       <div style={{
         padding: '8px 22px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9',
         display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, color: '#64748B',
       }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{
-            width: 18, height: 18, borderRadius: 3, background: 'var(--thy-red)',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <img src="/assets/logo-badge.png" alt="" style={{ height: 12, filter: 'brightness(0) invert(1)' }} />
-          </span>
-          <strong style={{ color: 'var(--thy-navy)' }}>{flight.airline}</strong>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <img src="/assets/thy-goose.svg" alt="Turkish Airlines"
+            style={{ height: 18, width: 18, borderRadius: 3, background: '#E81932', padding: 2 }} />
+          <strong style={{ color: 'var(--thy-navy)' }}>Turkish Airlines</strong>
           <span style={{ fontFamily: 'var(--font-mono)' }}>· {flight.code}</span>
         </span>
         <span>Uçak tipi: {flight.aircraft}</span>
