@@ -3,6 +3,7 @@ import { useT as useTR } from '../i18n.jsx';
 import { Icon as RBIcon } from '../icons.jsx';
 import { Tracker as RBTracker } from './Results.jsx';
 import { downloadRoutePdf } from '../services/pdf.js';
+import { getDefaultPlaces } from '../data/cityPlaces.js';
 
 /* THY Route — Route Builder (interactive map + day plan + places + co-pilot + miles) */
 const RBDS = window.THYRouteDesignSystem_cb84b4;
@@ -869,47 +870,34 @@ function RouteBuilderPage({ go, summary }) {
     ? (tour.segments[activeSeg]?.city || 'Roma')
     : (summary?.city || 'Roma');
 
-  // initial places (Roma)
-  const initial = [
-    { id: 1, name: 'Colosseum',           cat: 'museum', catLabel: 'Müze',     x: 420, y: 360, rating: 4.7, duration: '2sa', time: '09:00', partner: false, inRoute: true, order: 0 },
-    { id: 2, name: 'Foro Romano',         cat: 'museum', catLabel: 'Tarihi',   x: 400, y: 320, rating: 4.6, duration: '1.5sa', time: '11:30', partner: false, inRoute: true, order: 1 },
-    { id: 3, name: 'Pantheon',            cat: 'museum', catLabel: 'Tarihi',   x: 300, y: 240, rating: 4.8, duration: '1sa',   time: '14:00', partner: false, inRoute: true, order: 2 },
-    { id: 4, name: 'Trastevere — Da Enzo',cat: 'rest',   catLabel: 'Restoran', x: 160, y: 380, rating: 4.5, duration: '2sa',   time: '20:00', partner: true,  partnerSub: 'M&S - 1.500 mil/yemek', miles: 1500, inRoute: true, order: 3 },
-    { id: 5, name: 'Trevi Çeşmesi',       cat: 'view',   catLabel: 'Manzara',  x: 340, y: 200, rating: 4.7, duration: '30dk',  time: '10:00', partner: false, inRoute: true, order: 4 },
-    { id: 6, name: 'Hotel Artemide',      cat: 'hotel',  catLabel: 'Otel',     x: 380, y: 160, rating: 4.6, duration: '—',     time: '21:00', partner: true,  partnerSub: 'M&S - 500 mil/gece',    miles: 500,  inRoute: true, order: 5 },
-    { id: 7, name: 'Vatikan Müzesi',      cat: 'museum', catLabel: 'Müze',     x: 200, y: 200, rating: 4.8, duration: '3sa',   time: '',     partner: false, inRoute: false, order: null },
-    { id: 8, name: 'Borghese Galerisi',   cat: 'museum', catLabel: 'Müze',     x: 620, y: 180, rating: 4.7, duration: '2sa',   time: '',     partner: false, inRoute: false, order: null },
-    { id: 9, name: 'Mercato di Testaccio',cat: 'shop',   catLabel: 'Pazar',    x: 450, y: 510, rating: 4.4, duration: '1.5sa', time: '',     partner: true,  partnerSub: 'M&S - 2 mil/1 TL', miles: 800,  inRoute: false, order: null },
-    { id: 10, name: 'Roscioli',           cat: 'rest',   catLabel: 'Restoran', x: 280, y: 280, rating: 4.6, duration: '2sa',   time: '',     partner: true,  partnerSub: 'M&S - 1.200 mil/yemek', miles: 1200, inRoute: false, order: null },
-    { id: 11, name: 'Hotel de Russie',    cat: 'hotel',  catLabel: 'Lüks otel',x: 360, y: 110, rating: 4.9, duration: '—',     time: '',     partner: true,  partnerSub: 'M&S - 1.000 mil/gece',   miles: 1000, inRoute: false, order: null },
-    { id: 12, name: 'Piazza Navona',      cat: 'view',   catLabel: 'Meydan',   x: 270, y: 220, rating: 4.7, duration: '45dk',  time: '',     partner: false, inRoute: false, order: null },
-  ];
+  // initial places — city-aware: each Turkish city ships its own 4-5
+  // landmarks, single-city mode falls back to the Roma sample itinerary.
+  const initial = React.useMemo(() => getDefaultPlaces(city), [city]);
 
   const [places, setPlaces] = React.useState(initial);
+  const placesRef = React.useRef(places);
+  React.useEffect(() => { placesRef.current = places; }, [places]);
   const [tab, setTab] = React.useState('route');
-  const [selectedId, setSelectedId] = React.useState(1);
+  const [selectedId, setSelectedId] = React.useState(initial[0]?.id || 1);
   const [tickShare, setTickShare] = React.useState(false);
 
-  // When the user switches city tabs in multi-city mode, reset the working
-  // place list. Each segment keeps its own list in segmentPlaces below.
-  // NB: ref-backed snapshot to avoid an infinite re-render loop that would
-  // happen if we read/wrote `segmentPlaces` state inside the same effect.
+  // When the user switches city tabs in multi-city mode, swap the working
+  // place list. Each segment keeps its own list cached in a ref so going
+  // back to a tab restores user edits without a re-render loop.
   const segmentPlacesRef = React.useRef({});
   const prevActiveSegRef = React.useRef(0);
   React.useEffect(() => {
     if (!isMulti) return;
-    // Save outgoing segment's places under the *previous* index, then load
-    // the incoming segment's places (or [] for a fresh city).
     const prevIdx = prevActiveSegRef.current;
-    setPlaces((current) => {
-      segmentPlacesRef.current[prevIdx] = current;
-      return segmentPlacesRef.current[activeSeg] || [];
-    });
+    segmentPlacesRef.current[prevIdx] = placesRef.current;
+    const next = segmentPlacesRef.current[activeSeg] || getDefaultPlaces(city);
+    setPlaces(next);
+    placesRef.current = next;
     prevActiveSegRef.current = activeSeg;
-    setSelectedId(null);
+    setSelectedId(next[0]?.id ?? null);
     setTab('route');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSeg, isMulti]);
+  }, [activeSeg, isMulti, city]);
 
   // Multi-route management (persists in localStorage).
   //
@@ -1158,6 +1146,21 @@ function RouteBuilderPage({ go, summary }) {
                   {activeRoute?.name || `${city} Rotanız`}
                 </h1>
               )}
+              {/* Package badge in multi-city mode */}
+              {isMulti && tour?.packageName && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  marginLeft: 10, padding: '4px 10px',
+                  background: 'rgba(197,160,89,0.15)',
+                  border: '1px solid rgba(197,160,89,0.45)',
+                  color: 'var(--thy-gold-light)',
+                  borderRadius: 999,
+                  fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+                  alignSelf: 'center',
+                }}>
+                  <RBIcon.star size={11} stroke={2.5} /> {tour.packageName}
+                </span>
+              )}
 
               <button onClick={() => setShowRoutes(s => !s)} title="Rotalarım" style={{
                 background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
@@ -1283,10 +1286,21 @@ function RouteBuilderPage({ go, summary }) {
         )}
       </div>
 
-      {/* Türkiye Turu — city segment tabs */}
+      {/* Türkiye Turu — "Genel Bakış" + city segment tabs */}
       {isMulti && (
         <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 24px' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'stretch', gap: 4, overflowX: 'auto' }} className="scroll-thin">
+            {/* "Genel Bakış" — shows the whole multi-city trip timeline */}
+            <button onClick={() => setActiveSeg(-1)} style={{
+              padding: '14px 18px', background: 'transparent', border: 'none', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              borderBottom: `3px solid ${activeSeg === -1 ? 'var(--thy-red)' : 'transparent'}`,
+              color: activeSeg === -1 ? 'var(--thy-navy)' : '#64748B',
+              fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
+            }}>
+              <RBIcon.map size={14} stroke={2.4} />
+              Genel Bakış
+            </button>
             {tour.segments.map((seg, i) => {
               const active = i === activeSeg;
               return (
@@ -1316,6 +1330,7 @@ function RouteBuilderPage({ go, summary }) {
       )}
 
       {/* main 2-col layout — sidebar tightened so map can breathe */}
+      {!(isMulti && activeSeg === -1) && (
       <div style={{ margin: '0 auto', padding: '14px 12px 14px 16px', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 12, height: 'calc(100vh - 70px - 96px - 60px)' }}>
         <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 20px rgba(10,22,40,0.06)' }}>
           <RealMap
@@ -1364,6 +1379,166 @@ function RouteBuilderPage({ go, summary }) {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Multi-city "Genel Bakış" — whole-tour timeline */}
+      {isMulti && activeSeg === -1 && (
+        <OverviewPanel
+          tour={tour}
+          fromCity={summary?.tour?.fromCity}
+          onSelectCity={(i) => setActiveSeg(i)}
+          allPlaces={segmentPlacesRef.current}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------- Multi-city Overview — full trip timeline ---------- */
+function OverviewPanel({ tour, fromCity, onSelectCity, allPlaces }) {
+  if (!tour) return null;
+  const { segments, flights, totalDays, packageName } = tour;
+  const intercity = flights.filter(f => f.kind === 'intercity');
+  const inbound  = flights.find(f => f.kind === 'inbound');
+  const outbound = flights.find(f => f.kind === 'outbound');
+
+  // Cumulative day index where each segment starts.
+  let dayCursor = 1;
+  const segWithDays = segments.map((s) => {
+    const startDay = dayCursor;
+    dayCursor += s.days;
+    return { ...s, startDay, endDay: dayCursor - 1 };
+  });
+
+  return (
+    <div style={{ background: '#F3F5F8', padding: '20px 24px 40px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        {/* Stats row */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16,
+        }}>
+          {[
+            { label: 'PAKET',             value: packageName, accent: 'red' },
+            { label: 'TOPLAM SÜRE',       value: `${totalDays} gün` },
+            { label: 'ŞEHİR SAYISI',      value: `${segments.length}` },
+            { label: 'YURT İÇİ UÇUŞ',     value: `${intercity.length}` },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: '#fff', padding: '14px 18px', borderRadius: 8,
+              border: '1px solid #E2E8F0',
+            }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 800, color: '#94A3B8', letterSpacing: 1.5 }}>{s.label}</div>
+              <div style={{ fontFamily: s.accent === 'red' ? 'var(--font-ui)' : 'var(--font-mono)', fontSize: s.accent === 'red' ? 16 : 22, fontWeight: 800, color: s.accent === 'red' ? 'var(--thy-red)' : 'var(--thy-navy)', marginTop: 2 }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Trip headline */}
+        <div style={{
+          background: '#fff', borderRadius: 12, padding: 22, border: '1px solid #E2E8F0',
+        }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 800, color: 'var(--thy-red)', letterSpacing: 2, marginBottom: 10 }}>
+            YOLCULUK ZAMAN ÇİZGİSİ
+          </div>
+
+          {/* Inbound international flight */}
+          {inbound && (
+            <FlightStrip kind="inbound" flight={inbound} note={`${fromCity?.city || ''} → İstanbul`} />
+          )}
+
+          {/* City segments + intercity flights */}
+          {segWithDays.map((seg, i) => (
+            <React.Fragment key={seg.iata + i}>
+              <CitySegmentRow
+                seg={seg}
+                index={i}
+                onSelect={() => onSelectCity(i)}
+                placeCount={(allPlaces?.[i]?.filter(p => p.inRoute)?.length) ?? 0}
+              />
+              {intercity[i] && (
+                <FlightStrip kind="intercity" flight={intercity[i]} />
+              )}
+            </React.Fragment>
+          ))}
+
+          {outbound && (
+            <FlightStrip kind="outbound" flight={outbound} note={`İstanbul → ${fromCity?.city || ''}`} />
+          )}
+        </div>
+
+        {/* Hint */}
+        <div style={{
+          marginTop: 16, padding: '12px 16px', background: '#fff', borderRadius: 6,
+          border: '1px dashed #CBD5E1', fontSize: 12, color: '#64748B',
+          display: 'flex', gap: 10, alignItems: 'center',
+        }}>
+          <RBIcon.pin size={14} style={{ color: 'var(--thy-red)', flexShrink: 0 }} />
+          Bir şehre tıklayın → o şehrin haritası, günlük planı ve Miles&amp;Smiles önerileri açılır.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CitySegmentRow({ seg, index, onSelect, placeCount }) {
+  return (
+    <button onClick={onSelect} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 16,
+      padding: '14px 18px', marginBottom: 8,
+      background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8,
+      cursor: 'pointer', textAlign: 'left',
+      transition: 'all .15s var(--ease-aerodynamic)',
+    }} onMouseEnter={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = 'var(--thy-red)'; e.currentTarget.style.transform = 'translateX(2px)'; }}
+       onMouseLeave={(e) => { e.currentTarget.style.background = '#F8FAFC'; e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.transform = 'none'; }}>
+      <span style={{
+        width: 36, height: 36, borderRadius: '50%',
+        background: seg.image || 'var(--thy-red)',
+        color: '#fff', fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 14,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>{index + 1}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 800, color: 'var(--thy-navy)' }}>{seg.city}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#94A3B8', fontWeight: 700 }}>{seg.iata}</span>
+        </div>
+        <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+          Gün <strong style={{ color: 'var(--thy-navy)', fontFamily: 'var(--font-mono)' }}>{seg.startDay}</strong>–<strong style={{ color: 'var(--thy-navy)', fontFamily: 'var(--font-mono)' }}>{seg.endDay}</strong>
+          {' · '}
+          {placeCount > 0
+            ? <span>{placeCount} durak planlı</span>
+            : <span style={{ color: 'var(--thy-red)' }}>Henüz açılmadı</span>}
+        </div>
+      </div>
+      <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--thy-red)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        Rotaya git <RBIcon.arrowRight size={11} stroke={2.5} />
+      </span>
+    </button>
+  );
+}
+
+function FlightStrip({ kind, flight, note }) {
+  const isAJ = flight.carrier === 'AJ';
+  const isIntl = kind !== 'intercity';
+  const accent = isAJ ? '#FFB81C' : 'var(--thy-red)';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14, padding: '8px 18px',
+      marginLeft: 16, marginBottom: 8,
+      borderLeft: `3px dashed ${accent}`,
+      background: isIntl ? 'rgba(183,49,44,0.04)' : 'transparent',
+    }}>
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 800, letterSpacing: 1.5,
+        padding: '3px 8px', background: accent, color: '#fff', borderRadius: 3,
+      }}>{isAJ ? 'AnadoluJet' : 'THY'}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--thy-navy)', fontWeight: 800 }}>{flight.flightNo}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#64748B' }}>
+        {flight.from} <RBIcon.arrowRight size={10} stroke={2.5} style={{ verticalAlign: 'middle' }} /> {flight.to}
+      </span>
+      <span style={{ fontSize: 11, color: '#94A3B8', flex: 1 }}>{note || flight.aircraft || ''}</span>
+      <span style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+        {flight.dep} · {flight.duration}
+      </span>
     </div>
   );
 }
