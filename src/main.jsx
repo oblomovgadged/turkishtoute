@@ -6,6 +6,10 @@ import ReactDOM from 'react-dom/client';
 window.React = React;
 window.ReactDOM = ReactDOM;
 
+// App-level + mobile-first responsive styles
+import './styles/global.css';
+import './styles/mobile.css';
+
 async function bootstrap() {
   // 1) Load DS bundle (registers window.THYRouteDesignSystem_cb84b4)
   await new Promise((resolve, reject) => {

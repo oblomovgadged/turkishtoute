@@ -1,6 +1,7 @@
 import React from 'react';
 import { LangProvider } from './i18n.jsx';
 import { Header, Footer } from './shell.jsx';
+import { MobileNav } from './MobileNav.jsx';
 import { HomePage } from './pages/Home.jsx';
 import { ResultsPage } from './pages/Results.jsx';
 import { RouteBuilderPage } from './pages/RouteBuilder.jsx';
@@ -59,6 +60,7 @@ function App() {
           {route === 'auth'    && <AuthPage    go={go} />}
         </main>
         {route !== 'auth' && <Footer go={go} />}
+        {route !== 'auth' && <MobileNav route={route} go={go} />}
       </div>
     </LangProvider>
   );
