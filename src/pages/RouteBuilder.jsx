@@ -194,6 +194,18 @@ const CITY_CENTERS = {
   'New York':{ lat: 40.7128, lng: -74.0060 },
   Dubai:     { lat: 25.2048, lng: 55.2708 },
   'İstanbul':{ lat: 41.0082, lng: 28.9784 },
+  // Turkish destinations used by Türkiye Turu mode
+  Ankara:    { lat: 39.9334, lng: 32.8597 },
+  'İzmir':   { lat: 38.4192, lng: 27.1287 },
+  Antalya:   { lat: 36.8969, lng: 30.7133 },
+  Kapadokya: { lat: 38.6431, lng: 34.8289 },
+  Bodrum:    { lat: 37.0344, lng: 27.4305 },
+  Dalaman:   { lat: 36.7128, lng: 28.7919 },
+  Konya:     { lat: 37.8746, lng: 32.4932 },
+  Gaziantep: { lat: 37.0662, lng: 37.3833 },
+  'Şanlıurfa':{ lat: 37.1591, lng: 38.7969 },
+  Trabzon:   { lat: 41.0015, lng: 39.7178 },
+  Pamukkale: { lat: 37.9203, lng: 29.1206 },
 };
 
 // Dark Google Maps theme — cockpit-feel, with POIs kept clickable.
@@ -846,7 +858,16 @@ function CoPilotPanel({ copilots, onInvite, link }) {
 /* ---------- Main RouteBuilder page ---------- */
 function RouteBuilderPage({ go, summary }) {
   const t = useTR();
-  const city = summary?.city || 'Roma';
+
+  // Multi-city ("Türkiye Turu") detection — each segment becomes a tab.
+  const isMulti = Boolean(summary?.multi && summary?.tour?.segments?.length);
+  const tour = summary?.tour || null;
+  const [activeSeg, setActiveSeg] = React.useState(0);
+
+  // Active city: in multi mode it follows the selected segment tab.
+  const city = isMulti
+    ? (tour.segments[activeSeg]?.city || 'Roma')
+    : (summary?.city || 'Roma');
 
   // initial places (Roma)
   const initial = [
@@ -868,6 +889,23 @@ function RouteBuilderPage({ go, summary }) {
   const [tab, setTab] = React.useState('route');
   const [selectedId, setSelectedId] = React.useState(1);
   const [tickShare, setTickShare] = React.useState(false);
+
+  // When the user switches city tabs in multi-city mode, reset the working
+  // place list. Each segment keeps its own list in segmentPlaces below.
+  const [segmentPlaces, setSegmentPlaces] = React.useState(() => ({}));
+  React.useEffect(() => {
+    if (!isMulti) return;
+    setPlaces((prev) => {
+      // Snapshot the just-left segment's places so we can restore them.
+      setSegmentPlaces((bag) => ({ ...bag, [`__prev_${activeSeg}`]: prev }));
+      const saved = segmentPlaces[activeSeg];
+      return saved || [];
+    });
+    // Reset interaction state when tab switches.
+    setSelectedId(null);
+    setTab('route');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSeg, isMulti]);
 
   // Multi-route management (persists in localStorage)
   const STORAGE_KEY = 'thyroute_saved_routes';
@@ -1217,6 +1255,38 @@ function RouteBuilderPage({ go, summary }) {
           }}>{shareToast}</div>
         )}
       </div>
+
+      {/* Türkiye Turu — city segment tabs */}
+      {isMulti && (
+        <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 24px' }}>
+          <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'stretch', gap: 4, overflowX: 'auto' }} className="scroll-thin">
+            {tour.segments.map((seg, i) => {
+              const active = i === activeSeg;
+              return (
+                <button key={seg.iata + i} onClick={() => setActiveSeg(i)} style={{
+                  padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 10,
+                  borderBottom: `3px solid ${active ? 'var(--thy-red)' : 'transparent'}`,
+                  color: active ? 'var(--thy-navy)' : '#64748B',
+                  fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', position: 'relative',
+                }}>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: '50%',
+                    background: active ? 'var(--thy-red)' : '#F3F5F8',
+                    color: active ? '#fff' : '#64748B',
+                    fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 11,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{i + 1}</span>
+                  {seg.city}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#94A3B8', fontWeight: 700 }}>
+                    {seg.days}g
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* main 2-col layout — sidebar tightened so map can breathe */}
       <div style={{ margin: '0 auto', padding: '14px 12px 14px 16px', display: 'grid', gridTemplateColumns: '1fr 420px', gap: 12, height: 'calc(100vh - 70px - 96px - 60px)' }}>
