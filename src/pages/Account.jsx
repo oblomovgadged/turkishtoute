@@ -20,10 +20,10 @@ function AccountPage({ go }) {
 
   /* ----- Saved routes state (so delete works) ----- */
   const [savedRoutes, setSavedRoutes] = React.useState([
-    { id: 'rm-1', name: 'Roma Rotam',         city: 'Roma',      country: 'İtalya',     places: 6,  miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
-    { id: 'rm-2', name: 'Paris Romantik',      city: 'Paris',     country: 'Fransa',     places: 8,  miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
-    { id: 'rm-3', name: 'Barcelona Balıkavcı', city: 'Barselona', country: 'İspanya',    places: 5,  miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
-    { id: 'rm-4', name: 'Tokyo Yolculuğu',     city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
+    { id: 'rm-1', name: 'Roma Rotanız',          city: 'Roma',      country: 'İtalya',     places: 6,  miles: 2000, days: 3, color: 'linear-gradient(135deg, #D97757, #6B1E18)', updated: 'Bugün' },
+    { id: 'rm-2', name: 'Paris Rotanız',         city: 'Paris',     country: 'Fransa',     places: 8,  miles: 3120, days: 4, color: 'linear-gradient(135deg, #6B7C93, #0F2244)', updated: '3 gün önce' },
+    { id: 'rm-3', name: 'Barselona Rotanız',     city: 'Barselona', country: 'İspanya',    places: 5,  miles: 1680, days: 2, color: 'linear-gradient(135deg, #C5A059, #8B6630)', updated: '2 hafta önce' },
+    { id: 'rm-4', name: 'Tokyo Rotanız',          city: 'Tokyo',     country: 'Japonya',    places: 12, miles: 5240, days: 6, color: 'linear-gradient(135deg, #E31837, #4A0E13)', updated: '1 ay önce' },
   ]);
   const deleteSavedRoute = (id) => {
     if (!confirm('Bu rotayı silmek istediğinizden emin misiniz?')) return;

@@ -42,12 +42,12 @@ function HomeBookingCard({ onSearch }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           {[
-            ['round', t('search.round')],
+            ['round',  t('search.round')],
             ['oneway', t('search.oneway')],
-            ['stop', t('search.stop')],
-            ['multi', 'Türkiye Turu'],
+            ['stop',   t('search.stop')],
+            ['multi',  'Türkiye Turu'],
           ].map(([k, l]) => (
-            <Radio key={k} label={l} checked={trip === k} onClick={() => setTrip(k)} />
+            <Radio key={k} label={l} checked={trip === k} onClick={() => setTrip(k)} highlight={k === 'multi'} />
           ))}
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748B' }}>
@@ -148,7 +148,32 @@ function Cell({ children, w, first, last, style = {}, onClick }) {
   );
 }
 
-function Radio({ label, checked, onClick }) {
+function Radio({ label, checked, onClick, highlight = false }) {
+  if (highlight) {
+    // Spotlight variant — used to surface the "Türkiye Turu" multi-city mode.
+    // Always-visible red pill so first-time visitors see it as a distinct feature.
+    return (
+      <label onClick={onClick} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+        padding: '6px 14px 6px 10px',
+        borderRadius: 999,
+        border: `1.5px solid ${checked ? 'var(--thy-red)' : 'rgba(183,49,44,0.55)'}`,
+        background: checked ? 'var(--thy-red)' : 'rgba(183,49,44,0.06)',
+        color: checked ? '#fff' : 'var(--thy-red)',
+        fontSize: 13, fontWeight: 800, letterSpacing: 0.2,
+        boxShadow: checked ? '0 0 0 3px rgba(183,49,44,0.18)' : 'none',
+        transition: 'all 0.15s var(--ease-aerodynamic)',
+      }}>
+        <span style={{
+          width: 16, height: 16, borderRadius: '50%',
+          border: `2px solid ${checked ? '#fff' : 'var(--thy-red)'}`,
+          background: checked ? 'var(--thy-red)' : 'transparent',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>{checked && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}</span>
+        <span style={{ fontSize: 13, fontWeight: 800 }}>✨ {label}</span>
+      </label>
+    );
+  }
   return (
     <label onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--thy-navy)' }}>
       <span style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${checked ? 'var(--thy-blue)' : '#94A3B8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

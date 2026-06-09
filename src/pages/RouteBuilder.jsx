@@ -892,45 +892,72 @@ function RouteBuilderPage({ go, summary }) {
 
   // When the user switches city tabs in multi-city mode, reset the working
   // place list. Each segment keeps its own list in segmentPlaces below.
-  const [segmentPlaces, setSegmentPlaces] = React.useState(() => ({}));
+  // NB: ref-backed snapshot to avoid an infinite re-render loop that would
+  // happen if we read/wrote `segmentPlaces` state inside the same effect.
+  const segmentPlacesRef = React.useRef({});
+  const prevActiveSegRef = React.useRef(0);
   React.useEffect(() => {
     if (!isMulti) return;
-    setPlaces((prev) => {
-      // Snapshot the just-left segment's places so we can restore them.
-      setSegmentPlaces((bag) => ({ ...bag, [`__prev_${activeSeg}`]: prev }));
-      const saved = segmentPlaces[activeSeg];
-      return saved || [];
+    // Save outgoing segment's places under the *previous* index, then load
+    // the incoming segment's places (or [] for a fresh city).
+    const prevIdx = prevActiveSegRef.current;
+    setPlaces((current) => {
+      segmentPlacesRef.current[prevIdx] = current;
+      return segmentPlacesRef.current[activeSeg] || [];
     });
-    // Reset interaction state when tab switches.
+    prevActiveSegRef.current = activeSeg;
     setSelectedId(null);
     setTab('route');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSeg, isMulti]);
 
-  // Multi-route management (persists in localStorage)
-  const STORAGE_KEY = 'thyroute_saved_routes';
+  // Multi-route management (persists in localStorage).
+  //
+  // In multi-city (Türkiye Turu) mode, every segment owns its own saved
+  // route. We namespace the storage key by the tour's package + city so an
+  // old single-city "Roma Rotam" cache doesn't bleed into the new tour
+  // (which was the cause of the post-load white screen).
+  const STORAGE_KEY = isMulti
+    ? `thyroute_saved_routes:${tour.packageId}:${city}`
+    : 'thyroute_saved_routes';
+  const ACTIVE_KEY  = isMulti
+    ? `thyroute_active_route:${tour.packageId}:${city}`
+    : 'thyroute_active_route';
   const [savedRoutes, setSavedRoutes] = React.useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
       if (parsed && parsed.length) return parsed;
     } catch (e) {}
-    return [{ id: 'rm-1', name: `${city} Rotam`, city }];
+    return [{ id: 'rm-1', name: `${city} Rotanız`, city }];
   });
+  // When the active city changes in multi-mode, rebuild from the new storage
+  // namespace so titles / saved routes follow the active tab.
+  React.useEffect(() => {
+    if (!isMulti) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      setSavedRoutes(parsed && parsed.length ? parsed : [{ id: 'rm-1', name: `${city} Rotanız`, city }]);
+    } catch (e) {
+      setSavedRoutes([{ id: 'rm-1', name: `${city} Rotanız`, city }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city]);
   const [activeRouteId, setActiveRouteId] = React.useState(() => {
-    const stored = localStorage.getItem('thyroute_active_route');
+    const stored = localStorage.getItem(ACTIVE_KEY);
     return stored || 'rm-1';
   });
-  const activeRoute = savedRoutes.find(r => r.id === activeRouteId) || savedRoutes[0];
+  const activeRoute = savedRoutes.find(r => r.id === activeRouteId) || savedRoutes[0] || { id: 'rm-1', name: `${city} Rotanız`, city };
   const [routeNameDraft, setRouteNameDraft] = React.useState(activeRoute?.name || '');
   const [editingName, setEditingName] = React.useState(false);
   const [showRoutes, setShowRoutes] = React.useState(false);
   const [showShare, setShowShare] = React.useState(false);
   const [shareToast, setShareToast] = React.useState('');
 
-  React.useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRoutes)); }, [savedRoutes]);
-  React.useEffect(() => { localStorage.setItem('thyroute_active_route', activeRouteId); }, [activeRouteId]);
-  React.useEffect(() => { setRouteNameDraft(activeRoute?.name || ''); }, [activeRouteId]);
+  React.useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRoutes)); }, [savedRoutes, STORAGE_KEY]);
+  React.useEffect(() => { localStorage.setItem(ACTIVE_KEY, activeRouteId); }, [activeRouteId, ACTIVE_KEY]);
+  React.useEffect(() => { setRouteNameDraft(activeRoute?.name || ''); }, [activeRouteId, activeRoute?.name]);
 
   const commitRouteName = () => {
     const v = routeNameDraft.trim() || activeRoute.name;
@@ -939,7 +966,7 @@ function RouteBuilderPage({ go, summary }) {
   };
   const addNewRoute = () => {
     const id = `rm-${Date.now()}`;
-    const name = `Yeni Rota ${savedRoutes.length + 1}`;
+    const name = `${savedRoutes.length + 1}. Rotanız`;
     setSavedRoutes(rs => [...rs, { id, name, city }]);
     setActiveRouteId(id);
     setShowRoutes(false);
