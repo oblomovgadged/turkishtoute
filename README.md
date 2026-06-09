@@ -1,23 +1,32 @@
-# Mobile v2 — küçük yama
+# Geri Alma Paketi — Mobile v1/v2'yi sil
 
-## Sadece BİR dosya değişti.
+## Adım 1 — SİLİNECEK dosyalar (bilgisayardaki projenden)
 
-| Dosya | İşlem |
+| Dosya | Aksiyon |
 |---|---|
-| `src/styles/mobile.css` | Üzerine yaz (v1'in üstüne) |
+| `src/styles/mobile.css` | **SİL** |
+| `src/MobileNav.jsx` | **SİL** |
 
-## Ne düzeldi
+Windows'ta: dosyayı sağ tık → **Delete**. Çöp kutusuna gider, geri alabilirsin.
 
-- **Üst bar:** "TURKISH AIRLINES" wordmark küçüldü, "ROUTE" altın rozeti gizlendi, "Hesabım" sadece ikon oldu — alt alta sığacak.
-- **Arama formu:** NEREDEN/NEREYE aynı satırda iki sütun, TARİH ve YOLCU/KABİN ayrı satırlarda, "Uçuş ara →" tam genişlikte alttan kırmızı buton.
+## Adım 2 — ÜZERİNE YAZILACAK 3 dosya (bu klasörden kopyala)
 
-## Kurulum
+| Bu klasördeki dosya | Bilgisayardaki yer |
+|---|---|
+| `src/main.jsx` | `thy-route-app/src/main.jsx` (üzerine yaz) |
+| `src/App.jsx` | `thy-route-app/src/App.jsx` (üzerine yaz) |
+| `index.html` | `thy-route-app/index.html` (üzerine yaz) |
 
-1. Bu klasördeki `src/styles/mobile.css`'i bilgisayardaki projende aynı yere kopyala (üzerine yaz)
-2. PowerShell:
-   ```
-   git add .
-   git commit -m "fix: mobile header + search form layout"
-   git push
-   ```
-3. Vercel 1-2 dakikada deploy eder, telefondan tekrar aç.
+## Adım 3 — Git push
+
+```powershell
+cd "C:\Users\borak\Downloads\web sitesi\thy-route-app"
+git add .
+git commit -m "revert: remove mobile-first layer (going with separate mobile design)"
+git push
+```
+
+## Sonuç
+
+Web siten yine masaüstü hâlinde, mobil yamaları temizlendi. Şimdi Claude Design'da
+ayrı bir mobil tasarım yapabilirsin (prompt'u sohbette).
