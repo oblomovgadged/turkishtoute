@@ -1,0 +1,301 @@
+/* ============================================================
+   THY Route — Mobile Responsive Layer
+   ============================================================
+   Single stylesheet, media-query driven. Activates ≤ 768 px
+   (phone + small tablet). The desktop layout in the rest of the
+   codebase is preserved untouched.
+
+   PRINCIPLE
+   ---------
+   No new JSX. Tailoring is done by overriding the inline-style
+   inline grid/flex layouts the site already uses, plus a couple
+   of selectors that target landmark structures (header, hero,
+   search card, results list, route builder).
+
+   IMPORT
+   ------
+   This file is imported once in src/main.jsx:
+       import './styles/mobile.css';
+   It plays nicely alongside global.css.
+
+   COVERAGE
+   --------
+   ✓ Header (logo + nav collapse, currency/lang chip cluster)
+   ✓ Home hero + search card (vertical stack, full-width inputs)
+   ✓ Trip-type tabs (Türkiye Turu chip wraps)
+   ✓ Popular routes + partners (single column)
+   ✓ Footer (4-col → 2-col → 1-col)
+   ✓ Results: filters drawer + flight cards single column
+   ✓ Eco/Biz tile pair → vertical stack
+   ✓ Package table (4 cards) → vertical stack
+   ✓ Route Builder: map on top, sidebar below
+   ✓ Multi-city segment tabs (horizontal scroll)
+   ✓ Account: route cards single column
+
+   NB. Use the system-wide CSS variables (--thy-navy, etc.) — never
+   hard-coded hexes — so any future palette tweak propagates here too.
+   ============================================================ */
+
+/* ====================  Tablet & smaller  ==================== */
+@media (max-width: 1024px) {
+
+  /* Site shell padding tightens */
+  body, #root { font-size: 14px; }
+
+  /* Route Builder map column = 60%, sidebar 40% on tablet */
+  div[style*="gridTemplateColumns: '1fr 420px'"] {
+    grid-template-columns: 1fr 360px !important;
+    gap: 10px !important;
+  }
+}
+
+/* ====================  Phone (≤ 768 px)  ==================== */
+@media (max-width: 768px) {
+
+  /* ============= GLOBAL ============= */
+  html, body { font-size: 14px; -webkit-text-size-adjust: 100%; }
+
+  /* Disable horizontal overflow caused by hero panoramas + map widgets */
+  body { overflow-x: hidden; }
+
+  /* Force every "maxWidth: 1200/1400" inline container to viewport */
+  div[style*="maxWidth: 1400"],
+  div[style*="maxWidth: 1200"],
+  div[style*="maxWidth: 800"],
+  div[style*="maxWidth: 1000"] {
+    max-width: 100% !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    box-sizing: border-box;
+  }
+
+  /* ============= HEADER ============= */
+  /* Header is a <header> tag with a flex row child */
+  header > div {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    gap: 8px !important;
+  }
+  /* Hide desktop primary nav links — keep brand + currency + login */
+  header nav { display: none !important; }
+  /* Brand text "THY ROUTE" hide, leave only logo */
+  header [data-brand-text] { display: none !important; }
+  /* Currency chip + lang chip stay compact */
+  header button { font-size: 11px !important; padding: 6px 10px !important; }
+
+  /* ============= HERO ============= */
+  /* Home hero gradient panel */
+  section[data-hero] {
+    min-height: 520px !important;
+    padding: 32px 16px 24px !important;
+  }
+  section[data-hero] h1 {
+    font-size: 32px !important;
+    line-height: 1.1 !important;
+    letter-spacing: -0.5px !important;
+  }
+  section[data-hero] p[data-subhead] {
+    font-size: 14px !important;
+  }
+
+  /* ============= SEARCH CARD ============= */
+  /* Trip type chips wrap to multiple lines */
+  div[data-trip-tabs] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  div[data-trip-tabs] button {
+    font-size: 11px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Form grid: From / To / Date / Pax → 1 column */
+  div[data-search-grid] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  div[data-search-grid] > * {
+    width: 100% !important;
+  }
+  div[data-search-grid] input,
+  div[data-search-grid] button {
+    font-size: 14px !important;
+    padding: 12px 14px !important;
+    width: 100% !important;
+  }
+
+  /* Search submit button full-width */
+  button[data-search-submit] {
+    width: 100% !important;
+    padding: 14px 0 !important;
+    font-size: 15px !important;
+  }
+
+  /* CRITICAL: Airport / city autocomplete dropdown — keep above other cards */
+  /* (The dropdown was rendering BEHIND the search panel on mobile.) */
+  [data-autocomplete] {
+    z-index: 9999 !important;
+    position: absolute !important;
+    left: 0 !important; right: 0 !important;
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* ============= POPULAR ROUTES / PARTNERS ============= */
+  /* Any "repeat(3, 1fr)" or "repeat(4, 1fr)" grid collapses */
+  div[style*="gridTemplateColumns: 'repeat(3, 1fr)'"],
+  div[style*="gridTemplateColumns: 'repeat(4, 1fr)'"],
+  div[style*="gridTemplateColumns: 'repeat(2, 1fr)'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ============= FOOTER ============= */
+  footer > div {
+    padding: 28px 16px 18px !important;
+  }
+  footer > div > div:first-child {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 22px !important;
+  }
+  /* The very bottom row (copyright + legal links) stacks */
+  footer > div > div:last-child {
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+  /* ============= RESULTS PAGE ============= */
+  /* Tracker pill row scrolls instead of compressing */
+  div[data-tracker] {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    padding: 14px 16px !important;
+  }
+  div[data-tracker] > div {
+    min-width: max-content !important;
+  }
+
+  /* Filters panel → collapsible top drawer */
+  div[data-filters] {
+    position: static !important;
+    width: 100% !important;
+    margin-bottom: 14px !important;
+  }
+  /* Page main grid (filters | flights) → stack */
+  div[data-results-grid] {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  /* Each flight card: airline row + eco/biz tiles vertical */
+  div[data-flight-card] {
+    flex-direction: column !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+  div[data-flight-tiles] {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* Package table — 4 cards horizontal scroll */
+  div[data-package-row] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 6px !important;
+  }
+  div[data-package-row] > * {
+    flex: 0 0 270px !important;
+  }
+
+  /* ============= ROUTE BUILDER ============= */
+  /* Hero band on the builder page */
+  div[data-rb-hero] {
+    padding: 18px 16px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  div[data-rb-hero] h1 {
+    font-size: 22px !important;
+  }
+  /* Stat row */
+  div[data-rb-stats] {
+    flex-wrap: wrap !important;
+    gap: 14px !important;
+    width: 100% !important;
+  }
+  /* Action button cluster (Pilot · Paylaş · Rapor) */
+  div[data-rb-actions] {
+    width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+  div[data-rb-actions] button {
+    flex: 1 !important;
+    min-width: 80px !important;
+    font-size: 11px !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Main 2-col layout: map on top, sidebar below — KEY FIX */
+  div[style*="gridTemplateColumns: '1fr 420px'"] {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+  /* Constrain the map to 60vh so it doesn't dominate */
+  div[data-map-frame] {
+    height: 60vh !important;
+    min-height: 320px !important;
+  }
+  /* Sidebar grows naturally */
+  aside[data-rb-sidebar] {
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Multi-city segment tabs — already scrolls; tighten */
+  div[data-segment-tabs] {
+    gap: 2px !important;
+  }
+  div[data-segment-tabs] button {
+    font-size: 12px !important;
+    padding: 12px 14px !important;
+  }
+
+  /* Overview timeline rows */
+  button[data-city-row] {
+    padding: 12px 14px !important;
+  }
+
+  /* ============= ACCOUNT ============= */
+  /* Saved routes grid */
+  div[data-saved-grid] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  /* Profile + miles cards stack */
+  div[data-account-top] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* ============= UTILITY ============= */
+  /* Touch targets: any pill button at least 44px tall */
+  button { min-height: 38px; }
+  input, select { min-height: 44px; }
+
+  /* Headings tighten one notch */
+  h1 { font-size: 26px !important; line-height: 1.15 !important; }
+  h2 { font-size: 20px !important; }
+  h3 { font-size: 17px !important; }
+}
+
+/* ====================  Small phones (≤ 380 px)  ==================== */
+@media (max-width: 380px) {
+  section[data-hero] h1 { font-size: 26px !important; }
+  div[data-rb-stats] > * { flex-basis: 45% !important; }
+}

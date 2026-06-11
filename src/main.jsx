@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './styles/mobile.css';
 
 // The design-system bundle is plain compiled JS that expects window.React.
 // We expose React globally THEN load the bundle THEN mount the app.
